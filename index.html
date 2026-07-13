@@ -1,0 +1,788 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<meta name="theme-color" content="#1f3864">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="安パト">
+<title>安全パトロール（試作版）｜中西組</title>
+<style>
+  :root{
+    --navy:#1f3864; --blue:#2f5597; --ok:#2e7d32; --warn:#ef6c00; --ng:#c62828;
+    --bg:#f4f6fa; --card:#fff; --line:#dde3ee;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  body{margin:0; font-family:"Hiragino Kaku Gothic ProN","Yu Gothic",Meiryo,sans-serif; background:var(--bg); color:#222; font-size:15px;}
+  header{background:var(--navy); color:#fff; padding:14px 16px; position:sticky; top:0; z-index:10;}
+  header h1{margin:0; font-size:16px;}
+  header .sub{font-size:11px; opacity:.8; margin-top:2px;}
+  main{max-width:560px; margin:0 auto; padding:12px 12px 90px;}
+  .card{background:var(--card); border:1px solid var(--line); border-radius:12px; padding:14px; margin-bottom:12px;}
+  .card h2{margin:0 0 10px; font-size:14px; color:var(--navy); border-left:4px solid var(--navy); padding-left:8px;}
+  label{display:block; font-size:12px; color:#555; margin:10px 0 4px;}
+  select,input[type=text],input[type=date],textarea{
+    width:100%; padding:10px; border:1px solid var(--line); border-radius:8px; font-size:15px; background:#fff;
+  }
+  textarea{min-height:60px;}
+  .item{border-top:1px solid var(--line); padding:12px 0;}
+  .item:first-of-type{border-top:none;}
+  .item .q{font-size:14px; line-height:1.5; margin-bottom:8px;}
+  .btns{display:flex; gap:6px;}
+  .btns button{
+    flex:1; padding:10px 0; border:1.5px solid var(--line); background:#fff; border-radius:8px;
+    font-size:13px; font-weight:bold; color:#666;
+  }
+  .btns button.sel-ok{background:var(--ok); border-color:var(--ok); color:#fff;}
+  .btns button.sel-warn{background:var(--warn); border-color:var(--warn); color:#fff;}
+  .btns button.sel-ng{background:var(--ng); border-color:var(--ng); color:#fff;}
+  .btns button.sel-na{background:#78909c; border-color:#78909c; color:#fff;}
+  .detail{margin-top:8px; display:none;}
+  .detail.show{display:block;}
+  .photo-btn{display:inline-block; margin-top:6px; font-size:13px; color:var(--blue); font-weight:bold;}
+  .thumb{max-width:90px; max-height:90px; border-radius:6px; margin:6px 6px 0 0; border:1px solid var(--line);}
+  .progress{position:fixed; bottom:0; left:0; right:0; background:#fff; border-top:1px solid var(--line); padding:10px 14px; display:flex; align-items:center; gap:10px; max-width:100%; z-index:10;}
+  .bar{flex:1; height:8px; background:#e3e8f2; border-radius:4px; overflow:hidden;}
+  .bar>div{height:100%; background:var(--blue); width:0%; transition:width .2s;}
+  .progress button{background:var(--navy); color:#fff; border:none; border-radius:8px; padding:10px 16px; font-size:14px; font-weight:bold;}
+  .progress button:disabled{background:#aab4c8;}
+  .counts{font-size:12px; color:#555; white-space:nowrap;}
+  #report{white-space:pre-wrap; font-size:13px; background:#f8f9fc; border:1px solid var(--line); border-radius:8px; padding:12px; line-height:1.7;}
+  .actions{display:flex; gap:8px; margin-top:10px;}
+  .actions button,.actions a{flex:1; text-align:center; padding:12px 0; border-radius:8px; font-size:14px; font-weight:bold; border:none; text-decoration:none;}
+  .a-copy{background:var(--blue); color:#fff;}
+  .a-mail{background:var(--ok); color:#fff;}
+  .a-back{background:#eceff5; color:#333;}
+  .badge{display:inline-block; font-size:11px; padding:2px 8px; border-radius:10px; margin-left:6px; vertical-align:middle;}
+  .b-ng{background:#fdecea; color:var(--ng);}
+  .b-warn{background:#fff3e0; color:var(--warn);}
+  .note{font-size:11px; color:#888; margin-top:8px; line-height:1.6;}
+  #page-report{display:none;}
+  .tabs{display:flex; gap:6px; margin-top:10px;}
+  .tab{flex:1; padding:8px 0; border:none; border-radius:8px; background:rgba(255,255,255,.15); color:#fff; font-size:13px; font-weight:bold;}
+  .tab.active{background:#fff; color:var(--navy);}
+  .zbadge{background:var(--ng); color:#fff; border-radius:9px; padding:1px 7px; font-size:11px;}
+  .chip{display:inline-block; font-size:11px; font-weight:bold; padding:3px 10px; border-radius:12px;}
+  .s-open{background:#fdecea; color:var(--ng);}
+  .s-fixed{background:#fff3e0; color:var(--warn);}
+  .s-done{background:#e8f5e9; color:var(--ok);}
+  .zcard{border:1px solid var(--line); border-radius:10px; padding:12px; margin-bottom:10px; background:#fff;}
+  .zmeta{font-size:11px; color:#777; margin:4px 0;}
+  .zbtn{width:100%; margin-top:8px; padding:11px 0; border:none; border-radius:8px; font-weight:bold; font-size:14px; color:#fff;}
+  .deadline-over{color:var(--ng); font-weight:bold; font-size:12px;}
+</style>
+</head>
+<body>
+<header>
+  <h1>安全パトロール（試作版）</h1>
+  <div class="sub">株式会社中西組｜点検 → 是正報告 → 承認 → 上司へ報告完了まで一気通貫</div>
+  <nav class="tabs">
+    <button class="tab active" id="tab-input" onclick="showPage('input')">点検入力</button>
+    <button class="tab" id="tab-zesei" onclick="showPage('zesei')">是正管理 <span class="zbadge" id="zbadge" style="display:none">0</span></button>
+    <button class="tab" id="tab-config" onclick="showPage('config')">設定</button>
+  </nav>
+</header>
+
+<main>
+<div id="page-input">
+  <div class="card">
+    <h2>基本情報</h2>
+    <label>工事名　<span style="color:#999">（設定タブで追加・変更できます）</span></label>
+    <select id="site"></select>
+    <label>パトロール種別</label>
+    <select id="ptype"></select>
+    <label>工種（重点モジュール）</label>
+    <select id="wtype" onchange="render()"></select>
+    <label>点検者名</label>
+    <input type="text" id="inspector" placeholder="例）土木部 監理課 ○○">
+    <label>点検日</label>
+    <input type="date" id="pdate">
+  </div>
+
+  <div class="card"><h2 id="common-title">① 共通基本項目</h2><div id="list-common"></div></div>
+  <div class="card"><h2 id="mod-title">② 工種別重点項目</h2><div id="list-module"></div></div>
+  <div class="card"><h2>③ 月間重点項目</h2><div id="list-monthly"></div></div>
+
+  <div class="card">
+    <h2>良好・評価事項（褒める安パト）</h2>
+    <textarea id="good" placeholder="良かった点を記入（月次で全現場に横展開されます）"></textarea>
+  </div>
+</div>
+
+<div id="page-report" class="card">
+  <h2 id="repTitle">報告書プレビュー（未確定）</h2>
+  <div id="prevBanner" style="background:#fff8e1;border:1px solid #ffe082;color:#7a6000;border-radius:8px;padding:10px;font-size:12px;line-height:1.6;margin-bottom:10px;">
+    プレビュー中です。内容を確認してください。<b>この段階では是正台帳への登録・送信は行われません。</b>修正する場合は「修正する」で入力画面に戻れます。
+  </div>
+  <div id="report"></div>
+  <div class="actions" id="confirmActions">
+    <button class="a-back" onclick="backToInput()">修正する</button>
+    <button class="a-copy" onclick="confirmReport()">この内容で確定</button>
+  </div>
+  <div id="finalActions" style="display:none">
+    <div class="actions">
+      <button class="a-mail" id="sharebtn" onclick="shareReport()">共有（写真付き）</button>
+      <button class="a-copy" onclick="downloadReport()">保存（写真付き）</button>
+    </div>
+    <div class="actions">
+      <button class="a-back" onclick="copyReport()">本文コピー</button>
+      <a class="a-back" id="maillink" href="#">メール（本文のみ）</a>
+      <button class="a-back" onclick="backToInput()">戻る</button>
+    </div>
+  </div>
+  <div class="note">
+    ※「共有（写真付き）」…スマホの共有画面から本文＋写真をLINE・メール・Googleドライブ等へまとめて送信できます。<br>
+    ※「保存（写真付き）」…写真を埋め込んだ報告書ファイル（HTML）を端末に保存します。メール添付や工事フォルダへのアップロードにご利用ください。<br>
+    ※本番運用（Google AppSheet化）では、送信と同時に是正管理台帳への自動登録・写真のドライブ保存まで自動化できます。
+  </div>
+</div>
+
+<div id="page-zesei" style="display:none">
+  <div class="card">
+    <h2>是正管理（未是正 → 是正報告 → 承認 → 上司へ報告完了）</h2>
+    <label>操作する立場</label>
+    <select id="role" onchange="renderZesei()">
+      <option value="pat">安パト者（承認・上司へ報告）</option>
+      <option value="fix">被点検者（是正報告）</option>
+    </select>
+    <div id="zlist" style="margin-top:12px;"></div>
+    <div class="actions">
+      <button class="a-back" onclick="exportLedger()">台帳を書き出し</button>
+      <label class="a-back" style="flex:1;display:flex;align-items:center;justify-content:center;cursor:pointer;padding:12px 0;border-radius:8px;font-size:14px;font-weight:bold;">台帳を読み込み<input type="file" accept=".json" style="display:none" onchange="importLedger(this)"></label>
+    </div>
+    <div class="note">※試作版のため台帳はこの端末に保存されます。安パト者⇔被点検者間の受け渡しは「台帳を書き出し」→LINE・メール等で送付→「台帳を読み込み」で行えます。本番のAppSheet版では全員のスマホに自動同期されます。</div>
+  </div>
+</div>
+
+<div id="page-config" style="display:none">
+  <div class="card">
+    <h2>マスタ設定（工事名・種別・チェック項目）</h2>
+    <div class="note" style="margin-bottom:6px;">1行に1件で入力してください。「マスタを保存」で点検入力の選択肢に即反映されます（入力中の点検はリセットされます）。</div>
+    <label>工事名リスト</label>
+    <textarea id="ms_sites" style="min-height:130px"></textarea>
+    <label>パトロール種別リスト（変更したら下の報告先設定も確認してください）</label>
+    <textarea id="ms_ptypes" style="min-height:100px"></textarea>
+    <label>① 共通基本項目</label>
+    <textarea id="ms_common" style="min-height:160px"></textarea>
+    <label>③ 月間重点項目（毎月ここを差し替え）</label>
+    <textarea id="ms_monthly" style="min-height:70px"></textarea>
+    <label>② 工種別重点モジュール</label>
+    <div id="ms_modules"></div>
+    <button class="zbtn" style="background:var(--blue);" onclick="addModule()">＋ 工種を追加</button>
+    <div class="actions">
+      <button class="a-copy" onclick="saveMasters()">マスタを保存</button>
+      <button class="a-back" onclick="resetMasters()">初期値に戻す</button>
+    </div>
+  </div>
+  <div class="card">
+    <h2>報告先設定（パトロール種別 × 役職）</h2>
+    <div class="note" style="margin-bottom:6px;">是正完了の承認時に、どの役職へ報告するかを種別ごとに設定します（例：店社・重点パトは常務以上へ）。メールアドレスを入れると宛先も自動セットされます。</div>
+    <div id="routelist"></div>
+    <div class="actions"><button class="a-copy" onclick="saveRoutes()">設定を保存</button></div>
+  </div>
+</div>
+</main>
+
+<div class="progress" id="progressbar">
+  <div class="counts" id="counts">0/0</div>
+  <div class="bar"><div id="barfill"></div></div>
+  <button id="donebtn" onclick="makeReport()">プレビュー</button>
+</div>
+
+<script>
+// ===== マスタ（工事名・種別・チェック項目）：設定タブで編集可能 =====
+const DEFAULT_MASTERS = {
+  sites: [
+    "住吉本町1丁目地区他避難所下流汚水管耐震化工事",
+    "千鳥が丘３丁目地区他汚水管改築工事",
+    "東尻池新町地区他汚水管改築工事",
+    "上三条町地区他汚水管改築工事",
+    "岡本1丁目地区他汚水管改築工事(その３)",
+    "第２須磨汚水幹線他築造工事",
+    "垂水(塩屋北町）配水管取替工事その７",
+    "山地重点　７山重第１号",
+    "R8年度下水道施設小規模工事（単価契約・垂水・西）",
+    "R8年度下水道施設小規模工事（単価契約・長田・須磨）",
+    "西脇市嶋蓄電所"
+  ],
+  ptypes: [
+    "店社パトロール（第1回・全項目）",
+    "店社パトロール（第2回・重点）",
+    "監理課パトロール",
+    "役員パトロール",
+    "現場セルフ点検",
+    "臨時（台風・豪雨後等）"
+  ],
+  common: [
+    "危険箇所への立入防止対策と現場の美化",
+    "個人保護具（PPE）の適正着用",
+    "誘導体制の確立と車両・第三者対応",
+    "安全掲示板・法定掲示物の適正管理",
+    "安全通路の確保と段差の解消",
+    "緊急時備品の設置と期限確認",
+    "周辺および作業環境への配慮",
+    "作業前・悪天候後の安全点検実施の確認",
+    "停車車両の安全管理（車止め・鍵）",
+    "夜間・視界不良時の保安対策",
+    "各種看板・標識の設置と転倒防止",
+    "ウェアラブルカメラの作動・装着状態"
+  ],
+  monthly: [
+    "熱中症対策：WBGT測定、休憩・水分塩分補給、体調確認",
+    "夕立・ゲリラ豪雨時の掘削箇所養生・避難手順の周知",
+    "バックホウ旋回範囲の立入管理（前月ヒヤリ多発事項）"
+  ],
+  modules: [
+    {name:"開削（汚水管改築・耐震化）", items:[
+      "土留工（矢板・支保工）の設置状態・変状の有無",
+      "掘削深さに応じた土留・法面勾配の措置",
+      "埋設物（ガス・水道・電気・通信）の位置確認と防護",
+      "酸素欠乏・有害ガスの測定（マンホール・管内作業前）",
+      "管内・狭所作業時の換気・監視人配置",
+      "交通規制（規制図どおりの保安施設・誘導員配置）",
+      "覆工板・仮復旧箇所の段差・ガタつき",
+      "湧水・雨水対策（排水ポンプ・土砂流出防止）"
+    ]},
+    {name:"配水管取替", items:[
+      "既設管の断水・通水管理と誤操作防止",
+      "埋設物の位置確認と試掘結果の周知",
+      "掘削箇所の土留・湧水対策",
+      "交通規制・歩行者通路の確保",
+      "残土・資材の仮置きと第三者対策",
+      "管の吊り込み・玉掛け作業の安全措置"
+    ]},
+    {name:"治山・急斜面", items:[
+      "フルハーネス型墜落制止用器具の着用と親綱の使用",
+      "作業構台の手すり・中桟・幅木の設置状態",
+      "斜面上のホース・ケーブル類の結束・整理",
+      "油圧ユニット等の油漏れ対策（受けトレイ・吸着マット）",
+      "落石・崩壊危険箇所の点検と立入禁止措置",
+      "モノレール・索道等の運搬設備の点検",
+      "消火器等の視認性・アクセス性"
+    ]},
+    {name:"蓄電池・電気設備", items:[
+      "感電防止（検電・停電作業手順・絶縁保護具）",
+      "蓄電池・電気設備周辺の火気管理と消火設備",
+      "重量物（キュービクル・電池ユニット）の揚重計画と地盤養生",
+      "高圧部への立入禁止・標識の表示",
+      "作業者の電気工事資格・特別教育の確認",
+      "緊急時（電気火災）の対応手順の周知"
+    ]}
+  ]
+};
+let masters = (function(){
+  let saved = null;
+  try{ const v = localStorage.getItem("anpat_masters"); saved = v? JSON.parse(v) : null; }catch(e){}
+  const m = saved || JSON.parse(JSON.stringify(DEFAULT_MASTERS));
+  ["sites","ptypes","common","monthly","modules"].forEach(k=>{
+    if(!m[k]) m[k] = JSON.parse(JSON.stringify(DEFAULT_MASTERS[k]));
+  });
+  return m;
+})();
+
+function curModule(){
+  const v = document.getElementById("wtype").value;
+  if(v==="none") return {name:"② 工種別重点（対象外）", items:[]};
+  const m = masters.modules[+v];
+  return m? {name:"② 工種別重点（"+m.name+"）", items:m.items} : {name:"② 工種別重点", items:[]};
+}
+function fillSelect(id, arr){
+  const el = document.getElementById(id);
+  const old = el.value;
+  el.innerHTML = arr.map(x=>`<option>${x}</option>`).join("");
+  if(arr.includes(old)) el.value = old;
+}
+function refreshSelects(){
+  fillSelect("site", masters.sites.concat(["その他"]));
+  fillSelect("ptype", masters.ptypes);
+  const el = document.getElementById("wtype");
+  const old = el.value;
+  el.innerHTML = masters.modules.map((m,i)=>`<option value="${i}">${m.name}</option>`).join("")
+    + '<option value="none">共通項目のみ</option>';
+  if([...el.options].some(o=>o.value===old)) el.value = old;
+}
+
+const LEVELS = [["ok","良好"],["warn","要注意"],["ng","要是正"],["na","対象外"]];
+let state = {};
+
+function itemHTML(group, idx, text){
+  const key = group + "_" + idx;
+  return `<div class="item" id="it_${key}">
+    <div class="q">${text}</div>
+    <div class="btns">` +
+    LEVELS.map(l=>`<button id="b_${key}_${l[0]}" onclick="setLevel('${key}','${l[0]}')">${l[1]}</button>`).join("") +
+    `</div>
+    <div class="detail" id="d_${key}">
+      <label>指摘内容</label>
+      <textarea id="c_${key}" placeholder="状況と指摘内容を記入"></textarea>
+      <label class="photo-btn">📷 写真を撮影／選択
+        <input type="file" accept="image/*" capture="environment" style="display:none" onchange="addPhoto('${key}',this)">
+      </label>
+      <div id="p_${key}"></div>
+    </div>
+  </div>`;
+}
+
+function render(){
+  const mod = curModule();
+  document.getElementById("common-title").textContent = "① 共通基本項目（"+masters.common.length+"）";
+  document.getElementById("list-common").innerHTML =
+    masters.common.map((t,i)=>itemHTML("c",i,t)).join("");
+  document.getElementById("mod-title").textContent = mod.name;
+  document.getElementById("list-module").innerHTML =
+    mod.items.map((t,i)=>itemHTML("m",i,t)).join("") ||
+    '<div class="note">この工種には重点モジュールがありません。</div>';
+  document.getElementById("list-monthly").innerHTML =
+    masters.monthly.map((t,i)=>itemHTML("g",i,t)).join("");
+  state = {};
+  madeRegistered = false;
+  updateProgress();
+}
+
+function setLevel(key, lv){
+  state[key] = state[key] || {};
+  state[key].level = lv;
+  madeRegistered = false;
+  LEVELS.forEach(l=>{
+    const b = document.getElementById(`b_${key}_${l[0]}`);
+    b.className = (l[0]===lv) ? "sel-"+lv : "";
+  });
+  document.getElementById("d_"+key).className =
+    (lv==="warn"||lv==="ng") ? "detail show" : "detail";
+  updateProgress();
+}
+
+function addPhoto(key, input){
+  const f = input.files[0];
+  if(!f) return;
+  // 画像を縮小してデータ保持（メール・共有で扱いやすいサイズに）
+  const r = new FileReader();
+  r.onload = e=>{
+    const im = new Image();
+    im.onload = ()=>{
+      const MAX = 1280;
+      const sc = Math.min(1, MAX/Math.max(im.width, im.height));
+      const cv = document.createElement("canvas");
+      cv.width = Math.round(im.width*sc); cv.height = Math.round(im.height*sc);
+      cv.getContext("2d").drawImage(im,0,0,cv.width,cv.height);
+      const data = cv.toDataURL("image/jpeg",0.8);
+      const img = document.createElement("img");
+      img.src = data; img.className = "thumb";
+      document.getElementById("p_"+key).appendChild(img);
+      state[key] = state[key] || {};
+      state[key].photoData = state[key].photoData || [];
+      state[key].photoData.push(data);
+    };
+    im.src = e.target.result;
+  };
+  r.readAsDataURL(f);
+}
+
+function dataURLtoFile(dataURL, name){
+  const [meta, b64] = dataURL.split(",");
+  const mime = meta.match(/:(.*?);/)[1];
+  const bin = atob(b64);
+  const arr = new Uint8Array(bin.length);
+  for(let i=0;i<bin.length;i++) arr[i] = bin.charCodeAt(i);
+  return new File([arr], name, {type:mime});
+}
+
+function totalItems(){
+  return masters.common.length + curModule().items.length + masters.monthly.length;
+}
+function updateProgress(){
+  const done = Object.values(state).filter(s=>s.level).length;
+  const total = totalItems();
+  document.getElementById("counts").textContent = done+"/"+total;
+  document.getElementById("barfill").style.width = (total? done/total*100 : 0)+"%";
+  document.getElementById("donebtn").disabled = done===0;
+}
+
+function itemText(key){
+  const [g,i] = key.split("_");
+  if(g==="c") return masters.common[+i];
+  if(g==="m") return curModule().items[+i];
+  return masters.monthly[+i];
+}
+
+let lastText = "", lastPhotos = [], lastMeta = {}, lastNg = [];
+
+// プレビュー確定：ここで初めて是正台帳へ登録し、共有・保存を有効化
+function confirmReport(){
+  if(lastNg.length && !madeRegistered){
+    const dl = new Date(lastMeta.date); dl.setDate(dl.getDate()+7);
+    lastNg.forEach(x=>ledger.push({
+      id: "z"+Date.now()+Math.floor(Math.random()*1000),
+      site:lastMeta.site, ptype:lastMeta.ptype, date:lastMeta.date, inspector:lastMeta.inspector,
+      item:x.item, comment:x.comment, photos:x.photos,
+      deadline: dl.toISOString().slice(0,10),
+      status:"未是正", fix:null, approved:null
+    }));
+    lsSet("anpat_ledger", ledger);
+    madeRegistered = true;
+    updateBadge();
+  }
+  document.getElementById("repTitle").textContent = "報告書（確定済み）";
+  document.getElementById("prevBanner").style.display = "none";
+  document.getElementById("confirmActions").style.display = "none";
+  document.getElementById("finalActions").style.display = "block";
+  if(lastNg.length) alert("確定しました。要是正 "+lastNg.length+" 件を「是正管理」に登録しました。");
+  else alert("確定しました（要是正はありません）。");
+  window.scrollTo(0,0);
+}
+
+function makeReport(){
+  const d = id=>document.getElementById(id).value;
+  const today = d("pdate") || new Date().toISOString().slice(0,10);
+  const done = Object.keys(state).filter(k=>state[k].level).length;
+  let ng=[], warn=[];
+  lastPhotos = [];
+  for(const k of Object.keys(state)){
+    const s = state[k];
+    if(!s.level) continue;
+    const c = (document.getElementById("c_"+k)||{}).value || "";
+    const photos = s.photoData || [];
+    photos.forEach((p,i)=>lastPhotos.push({data:p, caption:itemText(k)+"（写真"+(i+1)+"）"}));
+    if(s.level==="ng") ng.push({item:itemText(k), comment:c, photos, t:"・"+itemText(k)+(c?("\n　→ "+c):"")+(photos.length?("（写真"+photos.length+"枚）"):"")});
+    if(s.level==="warn") warn.push({t:"・"+itemText(k)+(c?("\n　→ "+c):""), photos});
+  }
+  let rep = "";
+  rep += "＝＝ 安全パトロール実施報告 ＝＝\n";
+  rep += "工事名　　：" + d("site") + "\n";
+  rep += "種別　　　：" + d("ptype") + "\n";
+  rep += "点検日　　：" + today + "\n";
+  rep += "点検者　　：" + (d("inspector")||"（未記入）") + "\n";
+  rep += "点検項目数：" + done + "／" + totalItems() + "\n\n";
+  rep += "【要是正】" + (ng.length? "\n"+ng.map(x=>x.t).join("\n") : "　なし") + "\n\n";
+  rep += "【要注意（口頭指導・当日改善）】" + (warn.length? "\n"+warn.map(x=>x.t).join("\n") : "　なし") + "\n\n";
+  rep += "【良好・評価事項】\n" + (d("good")||"　（記載なし）") + "\n\n";
+  if(ng.length) rep += "※要是正項目は確定時にアプリの「是正管理」へ登録されます。原則1週間以内（重大指摘は即時）に是正し、被点検者はアプリから是正報告してください。\n";
+  lastText = rep;
+  lastMeta = {site:d("site"), ptype:d("ptype"), inspector:d("inspector")||"（未記入）", date:today};
+  lastNg = ng;
+
+  // プレビューモードで表示（この時点では台帳登録しない）
+  document.getElementById("repTitle").textContent = "報告書プレビュー（未確定）";
+  document.getElementById("prevBanner").style.display = "block";
+  document.getElementById("confirmActions").style.display = "flex";
+  document.getElementById("finalActions").style.display = "none";
+
+  // プレビュー：本文＋写真をインライン表示
+  const rb = document.getElementById("report");
+  rb.textContent = rep;
+  if(lastPhotos.length){
+    const ph = document.createElement("div");
+    ph.innerHTML = "<b>【添付写真 "+lastPhotos.length+"枚】</b><br>";
+    lastPhotos.forEach(p=>{
+      const w = document.createElement("div");
+      w.style.cssText = "margin:8px 0;";
+      w.innerHTML = `<img src="${p.data}" style="max-width:100%;border-radius:8px;border:1px solid #dde3ee;"><div style="font-size:11px;color:#666;">${p.caption}</div>`;
+      ph.appendChild(w);
+    });
+    rb.appendChild(ph);
+  }
+  document.getElementById("maillink").href =
+    "mailto:?subject=" + encodeURIComponent("【安パト報告】"+d("site")+" "+today) +
+    "&body=" + encodeURIComponent(rep);
+  // 共有APIが使えない環境では共有ボタンを隠す
+  document.getElementById("sharebtn").style.display = (navigator.share && navigator.canShare) ? "" : "none";
+  document.getElementById("page-input").style.display = "none";
+  document.getElementById("page-report").style.display = "block";
+  document.getElementById("progressbar").style.display = "none";
+  window.scrollTo(0,0);
+}
+
+// スマホの共有シートで本文＋写真をまとめて送信（LINE・メール・ドライブ等）
+async function shareReport(){
+  const files = lastPhotos.map((p,i)=>dataURLtoFile(p.data, "安パト写真"+(i+1)+".jpg"));
+  const payload = {title:"【安パト報告】"+lastMeta.site, text:lastText, files};
+  try{
+    if(files.length && navigator.canShare && navigator.canShare({files})){
+      await navigator.share(payload);
+    } else {
+      await navigator.share({title:payload.title, text:lastText});
+      if(files.length) alert("この端末は写真の同時共有に未対応のため、本文のみ共有しました。写真は「保存」から報告書ファイルをご利用ください。");
+    }
+  }catch(e){ /* ユーザーがキャンセルした場合など */ }
+}
+
+// 写真埋め込みの自己完結型HTML報告書を保存（メール添付・ドライブ保存用）
+function downloadReport(){
+  const esc = s=>s.replace(/&/g,"&amp;").replace(/</g,"&lt;");
+  let html = `<!DOCTYPE html><html lang="ja"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>安パト報告 ${esc(lastMeta.site)} ${lastMeta.date}</title>
+<style>body{font-family:"Hiragino Kaku Gothic ProN","Yu Gothic",Meiryo,sans-serif;max-width:640px;margin:0 auto;padding:16px;line-height:1.7;font-size:14px;}
+pre{white-space:pre-wrap;background:#f6f8fb;border:1px solid #dde3ee;border-radius:8px;padding:14px;}
+img{max-width:100%;border-radius:8px;border:1px solid #dde3ee;margin-top:10px;}
+.cap{font-size:11px;color:#666;margin-bottom:6px;}
+h1{font-size:18px;color:#1f3864;}</style></head><body>
+<h1>安全パトロール実施報告（写真付き）</h1>
+<pre>${esc(lastText)}</pre>`;
+  lastPhotos.forEach(p=>{
+    html += `<img src="${p.data}"><div class="cap">${esc(p.caption)}</div>`;
+  });
+  html += `</body></html>`;
+  const blob = new Blob([html], {type:"text/html"});
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "安パト報告_" + lastMeta.date + ".html";
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+function backToInput(){
+  document.getElementById("page-input").style.display = "block";
+  document.getElementById("page-report").style.display = "none";
+  document.getElementById("progressbar").style.display = "flex";
+}
+function copyReport(){
+  navigator.clipboard.writeText(lastText)
+    .then(()=>alert("コピーしました"))
+    .catch(()=>alert("コピーできませんでした。長押しで選択してください。"));
+}
+
+// ===== 是正管理ワークフロー =====
+function lsGet(k, def){ try{ const v=localStorage.getItem(k); return v?JSON.parse(v):def; }catch(e){ return def; } }
+function lsSet(k, v){ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){} }
+let ledger = lsGet("anpat_ledger", []);
+let madeRegistered = false;
+const DEFAULT_ROUTES = {
+  "店社パトロール（第1回・全項目）":{yaku:"常務以上", mail:""},
+  "店社パトロール（第2回・重点）":{yaku:"常務以上", mail:""},
+  "監理課パトロール":{yaku:"土木部長", mail:""},
+  "役員パトロール":{yaku:"社長", mail:""},
+  "現場セルフ点検":{yaku:"安全担当者", mail:""},
+  "臨時（台風・豪雨後等）":{yaku:"常務以上", mail:""}
+};
+let routes = Object.assign({}, DEFAULT_ROUTES, lsGet("anpat_routes", {}));
+
+function updateBadge(){
+  const n = ledger.filter(z=>z.status!=="完了").length;
+  const b = document.getElementById("zbadge");
+  b.textContent = n; b.style.display = n? "":"none";
+}
+
+let zPhotoTemp = {};
+function addZPhoto(id, input){
+  const f = input.files[0]; if(!f) return;
+  const r = new FileReader();
+  r.onload = e=>{
+    const im = new Image();
+    im.onload = ()=>{
+      const MAX=1280, sc=Math.min(1,MAX/Math.max(im.width,im.height));
+      const cv=document.createElement("canvas");
+      cv.width=Math.round(im.width*sc); cv.height=Math.round(im.height*sc);
+      cv.getContext("2d").drawImage(im,0,0,cv.width,cv.height);
+      const data=cv.toDataURL("image/jpeg",0.8);
+      (zPhotoTemp[id]=zPhotoTemp[id]||[]).push(data);
+      const img=document.createElement("img"); img.src=data; img.className="thumb";
+      document.getElementById("zp_"+id).appendChild(img);
+    };
+    im.src=e.target.result;
+  };
+  r.readAsDataURL(f);
+}
+
+function photoRow(ps){ return (ps&&ps.length)? "<div>"+ps.map(p=>`<img src="${p}" class="thumb">`).join("")+"</div>" : ""; }
+
+function renderZesei(){
+  updateBadge();
+  const role = document.getElementById("role").value;
+  const wrap = document.getElementById("zlist");
+  if(!ledger.length){ wrap.innerHTML='<div class="note">是正案件はありません。「点検入力」で要是正を登録するとここに表示されます。</div>'; return; }
+  const todayS = new Date().toISOString().slice(0,10);
+  wrap.innerHTML = ledger.slice().reverse().map(z=>{
+    const chip = z.status==="未是正" ? '<span class="chip s-open">未是正</span>'
+      : z.status==="是正報告済" ? '<span class="chip s-fixed">是正報告済（承認待ち）</span>'
+      : '<span class="chip s-done">完了・報告済</span>';
+    const over = (z.status!=="完了" && z.deadline<todayS) ? ' <span class="deadline-over">⚠期限超過</span>' : '';
+    let h = `<div class="zcard">${chip}${over}
+      <div style="font-weight:bold; margin-top:6px; line-height:1.5;">${z.item}</div>
+      <div class="zmeta">${z.site}</div>
+      <div class="zmeta">${z.ptype}｜指摘日 ${z.date}｜是正期限 ${z.deadline}｜点検者 ${z.inspector}</div>
+      ${z.comment?`<div style="font-size:13px;">→ ${z.comment}</div>`:""}
+      ${photoRow(z.photos)}`;
+    if(z.fix){
+      h += `<div style="border-top:1px dashed var(--line); margin-top:8px; padding-top:8px;">
+        <b style="font-size:12px; color:var(--warn);">是正報告（${z.fix.date}）</b>
+        <div style="font-size:13px;">${z.fix.comment||""}</div>${photoRow(z.fix.photos)}</div>`;
+    }
+    if(z.status==="未是正" && role==="fix"){
+      h += `<div style="margin-top:8px;">
+        <textarea id="zc_${z.id}" placeholder="是正内容を記入"></textarea>
+        <label class="photo-btn">📷 是正後の写真を撮影<input type="file" accept="image/*" capture="environment" style="display:none" onchange="addZPhoto('${z.id}',this)"></label>
+        <div id="zp_${z.id}"></div>
+        <button class="zbtn" style="background:var(--warn);" onclick="submitFix('${z.id}')">是正報告する</button></div>`;
+    }
+    if(z.status==="未是正" && role==="pat"){
+      h += `<div class="note">被点検者の是正報告待ちです。</div>`;
+    }
+    if(z.status==="是正報告済" && role==="pat"){
+      const rt = routes[z.ptype]||{yaku:"上司",mail:""};
+      h += `<button class="zbtn" style="background:var(--ok);" onclick="approveFix('${z.id}')">承認して ${rt.yaku} へ完了報告</button>`;
+    }
+    if(z.status==="是正報告済" && role==="fix"){
+      h += `<div class="note">安パト者の承認待ちです。</div>`;
+    }
+    if(z.status==="完了"){
+      h += `<div class="zmeta">承認日 ${z.approved?z.approved.date:""}｜報告先 ${(routes[z.ptype]||{}).yaku||"上司"}</div>`;
+    }
+    return h+"</div>";
+  }).join("");
+}
+
+function submitFix(id){
+  const z = ledger.find(x=>x.id===id); if(!z) return;
+  const c = (document.getElementById("zc_"+id)||{}).value||"";
+  const ps = zPhotoTemp[id]||[];
+  if(!ps.length && !confirm("是正後の写真がありません。このまま報告しますか？（原則写真1枚）")) return;
+  z.fix = {date:new Date().toISOString().slice(0,10), comment:c, photos:ps};
+  z.status = "是正報告済";
+  delete zPhotoTemp[id];
+  lsSet("anpat_ledger", ledger); renderZesei();
+}
+
+function approveFix(id){
+  const z = ledger.find(x=>x.id===id); if(!z) return;
+  z.status = "完了"; z.approved = {date:new Date().toISOString().slice(0,10)};
+  lsSet("anpat_ledger", ledger); renderZesei();
+  const rt = routes[z.ptype]||{yaku:"上司", mail:""};
+  const body = "安全パトロール是正完了報告\n\n"
+    + "報告先　：" + rt.yaku + "\n"
+    + "工事名　：" + z.site + "\n"
+    + "種別　　：" + z.ptype + "\n"
+    + "指摘日　：" + z.date + "（点検者 " + z.inspector + "）\n"
+    + "指摘事項：" + z.item + "\n"
+    + (z.comment? ("指摘内容：" + z.comment + "\n") : "")
+    + "是正報告：" + (z.fix? z.fix.date : "") + "　" + (z.fix && z.fix.comment? z.fix.comment : "") + "\n"
+    + "承認日　：" + z.approved.date + "\n\n"
+    + "※是正前後の写真はアプリの是正管理台帳をご確認ください。";
+  if(confirm("承認しました。" + rt.yaku + " へ完了報告メールを作成しますか？")){
+    location.href = "mailto:" + encodeURIComponent(rt.mail||"")
+      + "?subject=" + encodeURIComponent("【安パト是正完了】" + z.site)
+      + "&body=" + encodeURIComponent(body);
+  }
+}
+
+function exportLedger(){
+  const blob = new Blob([JSON.stringify({ledger, routes, masters}, null, 1)], {type:"application/json"});
+  const a = document.createElement("a"); a.href = URL.createObjectURL(blob);
+  a.download = "安パト是正台帳_" + new Date().toISOString().slice(0,10) + ".json";
+  a.click(); URL.revokeObjectURL(a.href);
+}
+function importLedger(input){
+  const f = input.files[0]; if(!f) return;
+  const r = new FileReader();
+  r.onload = e=>{
+    try{
+      const d = JSON.parse(e.target.result);
+      if(d.ledger) ledger = d.ledger;
+      if(d.routes) routes = Object.assign({}, DEFAULT_ROUTES, d.routes);
+      if(d.masters){ masters = d.masters; lsSet("anpat_masters", masters); refreshSelects(); render(); }
+      lsSet("anpat_ledger", ledger); lsSet("anpat_routes", routes);
+      renderZesei(); alert("台帳を読み込みました");
+    }catch(err){ alert("読み込めませんでした（ファイル形式を確認してください）"); }
+  };
+  r.readAsText(f);
+}
+
+function renderRoutes(){
+  document.getElementById("routelist").innerHTML = masters.ptypes.map((p,i)=>`
+    <div style="border-top:1px solid var(--line); padding:10px 0;">
+      <div style="font-size:13px; font-weight:bold;">${p}</div>
+      <label>報告先の役職</label><input type="text" id="ry_${i}" value="${(routes[p]||{}).yaku||"上司"}">
+      <label>報告先メールアドレス（任意）</label><input type="text" id="rm_${i}" value="${(routes[p]||{}).mail||""}" placeholder="例）jomu@example.co.jp">
+    </div>`).join("");
+}
+function saveRoutes(){
+  masters.ptypes.forEach((p,i)=>{
+    routes[p] = {yaku:document.getElementById("ry_"+i).value||"上司", mail:document.getElementById("rm_"+i).value||""};
+  });
+  lsSet("anpat_routes", routes); alert("報告先設定を保存しました");
+}
+
+// ===== マスタ設定エディタ =====
+function renderConfig(){
+  document.getElementById("ms_sites").value = masters.sites.join("\n");
+  document.getElementById("ms_ptypes").value = masters.ptypes.join("\n");
+  document.getElementById("ms_common").value = masters.common.join("\n");
+  document.getElementById("ms_monthly").value = masters.monthly.join("\n");
+  renderModulesEditor();
+  renderRoutes();
+}
+function renderModulesEditor(){
+  document.getElementById("ms_modules").innerHTML = masters.modules.map((m,i)=>`
+    <div style="border:1px solid var(--line); border-radius:8px; padding:10px; margin:8px 0;">
+      <label>工種名</label><input type="text" id="mm_name_${i}" value="${m.name}">
+      <label>点検項目（1行1件）</label><textarea id="mm_items_${i}" style="min-height:110px">${m.items.join("\n")}</textarea>
+      <button class="zbtn" style="background:var(--ng);" onclick="delModule(${i})">この工種を削除</button>
+    </div>`).join("");
+}
+function collectMastersFromUI(){
+  const lines = id=>document.getElementById(id).value.split("\n").map(s=>s.trim()).filter(Boolean);
+  masters.sites = lines("ms_sites");
+  masters.ptypes = lines("ms_ptypes");
+  masters.common = lines("ms_common");
+  masters.monthly = lines("ms_monthly");
+  masters.modules = masters.modules.map((m,i)=>{
+    const n = document.getElementById("mm_name_"+i);
+    const it = document.getElementById("mm_items_"+i);
+    if(!n || !it) return m;
+    return {name:(n.value.trim()||("工種"+(i+1))), items:it.value.split("\n").map(s=>s.trim()).filter(Boolean)};
+  });
+}
+function saveMasters(){
+  collectMastersFromUI();
+  if(!masters.sites.length) masters.sites = ["（工事名未設定）"];
+  if(!masters.ptypes.length) masters.ptypes = ["店社パトロール"];
+  if(!masters.common.length) masters.common = ["（共通項目未設定）"];
+  lsSet("anpat_masters", masters);
+  refreshSelects(); render(); renderRoutes();
+  alert("マスタを保存しました。点検入力に反映されています。");
+}
+function addModule(){
+  collectMastersFromUI();
+  masters.modules.push({name:"新しい工種", items:[]});
+  renderModulesEditor();
+}
+function delModule(i){
+  if(!confirm("「"+(masters.modules[i]||{}).name+"」を削除しますか？")) return;
+  collectMastersFromUI();
+  masters.modules.splice(i,1);
+  renderModulesEditor();
+}
+function resetMasters(){
+  if(!confirm("工事名・種別・チェック項目をすべて初期値に戻しますか？")) return;
+  masters = JSON.parse(JSON.stringify(DEFAULT_MASTERS));
+  lsSet("anpat_masters", masters);
+  renderConfig(); refreshSelects(); render();
+  alert("初期値に戻しました");
+}
+
+function showPage(p){
+  const pages = {input:"page-input", zesei:"page-zesei", config:"page-config"};
+  for(const k in pages) document.getElementById(pages[k]).style.display = (k===p)?"block":"none";
+  document.getElementById("page-report").style.display = "none";
+  document.getElementById("progressbar").style.display = (p==="input")?"flex":"none";
+  ["input","zesei","config"].forEach(k=>{
+    document.getElementById("tab-"+k).className = "tab"+(k===p?" active":"");
+  });
+  if(p==="zesei") renderZesei();
+  if(p==="config") renderConfig();
+  window.scrollTo(0,0);
+}
+
+document.getElementById("pdate").value = new Date().toISOString().slice(0,10);
+refreshSelects();
+render();
+updateBadge();
+
+// PWA：https配信時のみオフライン用サービスワーカーを登録（単体ファイル利用時は無害に無視）
+if("serviceWorker" in navigator && location.protocol==="https:"){
+  navigator.serviceWorker.register("./sw.js").catch(()=>{});
+}
+</script>
+</body>
+</html>
