@@ -268,7 +268,7 @@
     <label>Gemini APIキー</label>
     <input type="text" id="aiKey" placeholder="AIza…（未設定の場合、AI診断は使えません）">
     <label>モデル名（通常は変更不要）</label>
-    <input type="text" id="aiModel" placeholder="gemini-2.0-flash">
+    <input type="text" id="aiModel" placeholder="gemini-2.5-flash">
     <div class="actions"><button class="a-copy" onclick="saveAiCfg()">AI設定を保存</button></div>
   </div>
   <div class="card">
@@ -491,7 +491,7 @@ function itemHTML(group, idx, text){
 // ===== AI写真診断（β／Google Gemini API） =====
 function saveAiCfg(){
   lsSet("anpat_aikey", document.getElementById("aiKey").value.trim());
-  lsSet("anpat_aimodel", document.getElementById("aiModel").value.trim() || "gemini-2.0-flash");
+  lsSet("anpat_aimodel", document.getElementById("aiModel").value.trim() || "gemini-2.5-flash");
   alert("AI診断設定を保存しました（キーはこの端末にのみ保存されます）。");
 }
 async function aiDiagnose(key){
@@ -499,7 +499,8 @@ async function aiDiagnose(key){
   if(!apiKey){ alert("設定タブの「AI写真診断」でGemini APIキーを登録してください（無料枠あり・取得方法は設定タブ参照）。"); return; }
   const s = state[key];
   if(!s || !s.photoData || !s.photoData.length){ alert("先に写真を撮影してください。"); return; }
-  const model = lsGet("anpat_aimodel","gemini-2.0-flash");
+  let model = lsGet("anpat_aimodel","gemini-2.5-flash");
+  if(/^gemini-2\.0/.test(model)) model = "gemini-2.5-flash"; // 提供終了した旧モデルを自動移行
   const out = document.getElementById("ai_"+key);
   out.classList.add("show");
   out.textContent = "🤖 AI診断中…（10秒ほどお待ちください）";
@@ -1252,7 +1253,9 @@ function renderConfig(){
   document.getElementById("syncUrl").value = getSyncUrl();
   document.getElementById("adminKey").value = lsGet("anpat_adminkey","");
   document.getElementById("aiKey").value = lsGet("anpat_aikey","");
-  document.getElementById("aiModel").value = lsGet("anpat_aimodel","gemini-2.0-flash");
+  let cfgModel = lsGet("anpat_aimodel","gemini-2.5-flash");
+  if(/^gemini-2\.0/.test(cfgModel)){ cfgModel = "gemini-2.5-flash"; lsSet("anpat_aimodel", cfgModel); }
+  document.getElementById("aiModel").value = cfgModel;
   document.getElementById("ms_sites").value = masters.sites.join("\n");
   document.getElementById("ms_ptypes").value = masters.ptypes.join("\n");
   document.getElementById("ms_common").value = masters.common.join("\n");
