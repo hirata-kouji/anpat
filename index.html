@@ -264,12 +264,15 @@
   </div>
   <div class="card">
     <h2>AI写真診断（β）</h2>
-    <div class="note" style="margin-bottom:6px;">Google Gemini のAPIキー（無料枠あり）を登録すると、点検入力で撮影した写真をAIが確認し、危険箇所の所見を提案します。取得方法：PCまたはスマホで aistudio.google.com/apikey を開き「APIキーを作成」→ コピーして下に貼り付け。<br>※写真はGoogleのAIサーバに送信されます。通行人の顔等が写る写真への配慮をお願いします。<br>※AIの所見は参考情報です。最終判断は必ず点検者が行ってください。<br>※キーはこの端末にのみ保存されます（端末ごとに設定）。</div>
-    <label>Gemini APIキー</label>
-    <input type="text" id="aiKey" placeholder="AIza…（未設定の場合、AI診断は使えません）">
-    <label>モデル名（通常は変更不要）</label>
-    <input type="text" id="aiModel" placeholder="gemini-2.5-flash">
-    <div class="actions"><button class="a-copy" onclick="saveAiCfg()">AI設定を保存</button></div>
+    <div class="note" style="margin-bottom:6px;"><b>通常、この画面での設定は不要です。</b>管理者が同期サーバ（Apps Script）にAIキーを1回設定すれば、同期URLを登録済みの全端末でAI診断が使えます（設定方法は配布資料「同期サーバ設定手順」参照）。<br>※写真はGoogleのAIサーバに送信されます。通行人の顔等が写る写真への配慮をお願いします。<br>※AIの所見は参考情報です。最終判断は必ず点検者が行ってください。</div>
+    <details>
+      <summary style="font-size:12px; color:var(--blue); cursor:pointer;">上級者向け：この端末専用のAPIキーを使う場合（任意）</summary>
+      <label>Gemini APIキー（この端末のみ有効）</label>
+      <input type="text" id="aiKey" placeholder="AIza…（通常は空欄のまま）">
+      <label>モデル名（通常は変更不要）</label>
+      <input type="text" id="aiModel" placeholder="gemini-2.5-flash">
+      <div class="actions"><button class="a-copy" onclick="saveAiCfg()">AI設定を保存</button></div>
+    </details>
   </div>
   <div class="card">
     <h2>自動同期設定（全員で是正台帳を共有）</h2>
@@ -512,23 +515,57 @@ async function listAiModels(apiKey){
 }
 
 async function aiDiagnose(key){
-  const apiKey = lsGet("anpat_aikey","");
-  if(!apiKey){ alert("設定タブの「AI写真診断」でGemini APIキーを登録してください（無料枠あり・取得方法は設定タブ参照）。"); return; }
   const s = state[key];
   if(!s || !s.photoData || !s.photoData.length){ alert("先に写真を撮影してください。"); return; }
-  let model = lsGet("anpat_aimodel","gemini-2.5-flash");
-  if(/^gemini-2\.0/.test(model)) model = "gemini-2.5-flash";
   const out = document.getElementById("ai_"+key);
   out.classList.add("show");
-  out.textContent = "🤖 AI診断中…（10秒ほどお待ちください）";
-  const parts = [{text:
+  const promptText =
     "あなたは建設現場の安全パトロールの専門家です。次の写真を、点検項目「"+itemText(key)+"」の観点で確認し、日本語で簡潔に診断してください。\n"
     +"・冒頭に【要是正候補】【要注意候補】【良好】のいずれかを付ける\n"
     +"・危険箇所や不備は位置・対象物を具体的に\n"
     +"・写真から判断できないことは推測せず「写真からは確認できない」と書く\n"
-    +"・全体で3行以内"}];
-  s.photoData.forEach(p=>{
-    parts.push({inline_data:{mime_type:"image/jpeg", data:p.split(",")[1]}});
+    +"・全体で3行以内";
+  const images = s.photoData.map(p=>p.split(",")[1]);
+
+  // 【推奨経路】同期サーバ経由（管理者がサーバに1回キーを設定すれば全端末で利用可・端末設定不要）
+  const syncUrl = getSyncUrl();
+  const localKey = lsGet("anpat_aikey","");
+  if(syncUrl){
+    out.textContent = "🤖 AI診断中…（10秒ほどお待ちください）";
+    try{
+      const r = await fetch(syncUrl, {method:"POST", body:JSON.stringify({ai:1, prompt:promptText, images:images}), redirect:"follow"});
+      const d = await r.json();
+      if(d && d.aiText){
+        s.aiResult = d.aiText;
+        out.textContent = "🤖 " + d.aiText + "\n――\n※AIの参考所見です" + (d.model? "（使用モデル："+d.model+"）":"") + "。最終判断は必ず点検者が行ってください。";
+        return;
+      }
+      // サーバにキー未設定の場合のみ、端末キーがあれば直接方式へフォールバック
+      if(d && d.error && !/未設定/.test(String(d.error)) ){
+        out.textContent = "🤖 " + String(d.error);
+        return;
+      }
+      if(!localKey){
+        out.textContent = "🤖 AI診断はまだ有効化されていません。管理者が同期サーバ（Apps Script）のコードを最新版に更新し、GEMINI_KEY を設定すると、全端末で利用できるようになります（配布資料「同期サーバ設定手順」参照）。";
+        return;
+      }
+    }catch(e){
+      if(!localKey){
+        out.textContent = "🤖 診断に失敗しました（通信エラー）。電波状況を確認してください。";
+        return;
+      }
+    }
+  }
+
+  // 【従来経路】端末に登録したAPIキーで直接診断（上級者向け・任意）
+  if(!localKey){ alert("AI診断を使うには、管理者が同期サーバにAIキーを設定するか、設定タブでこの端末用のGemini APIキーを登録してください。"); return; }
+  const apiKey = localKey;
+  let model = lsGet("anpat_aimodel","gemini-2.5-flash");
+  if(/^gemini-2\.0/.test(model)) model = "gemini-2.5-flash";
+  out.textContent = "🤖 AI診断中…（10秒ほどお待ちください）";
+  const parts = [{text: promptText}];
+  images.forEach(b64=>{
+    parts.push({inline_data:{mime_type:"image/jpeg", data:b64}});
   });
   const doReq = async (m)=>{
     const r = await fetch("https://generativelanguage.googleapis.com/v1beta/models/"+encodeURIComponent(m)+":generateContent?key="+encodeURIComponent(apiKey), {
