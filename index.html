@@ -472,8 +472,11 @@ function itemHTML(group, idx, text){
     <div class="detail" id="d_${key}">
       <label>指摘内容</label>
       <textarea id="c_${key}" placeholder="状況と指摘内容を記入"></textarea>
-      <label class="photo-btn">📷 写真を撮影／選択
+      <label class="photo-btn">📷 撮影
         <input type="file" accept="image/*" capture="environment" style="display:none" onchange="addPhoto('${key}',this)">
+      </label>
+      <label class="photo-btn">🖼️ フォルダから選択（複数可）
+        <input type="file" accept="image/*" multiple style="display:none" onchange="addPhoto('${key}',this)">
       </label>
       <div id="p_${key}"></div>
       <div style="margin-top:4px;">
@@ -566,29 +569,31 @@ function setLevel(key, lv){
 }
 
 function addPhoto(key, input){
-  const f = input.files[0];
-  if(!f) return;
-  // 画像を縮小してデータ保持（メール・共有で扱いやすいサイズに）
-  const r = new FileReader();
-  r.onload = e=>{
-    const im = new Image();
-    im.onload = ()=>{
-      const MAX = 1280;
-      const sc = Math.min(1, MAX/Math.max(im.width, im.height));
-      const cv = document.createElement("canvas");
-      cv.width = Math.round(im.width*sc); cv.height = Math.round(im.height*sc);
-      cv.getContext("2d").drawImage(im,0,0,cv.width,cv.height);
-      const data = cv.toDataURL("image/jpeg",0.8);
-      const img = document.createElement("img");
-      img.src = data; img.className = "thumb";
-      document.getElementById("p_"+key).appendChild(img);
-      state[key] = state[key] || {};
-      state[key].photoData = state[key].photoData || [];
-      state[key].photoData.push(data);
+  // 撮影・フォルダ選択（複数可）の両方に対応。画像は縮小して保持
+  const files = Array.from(input.files || []);
+  input.value = "";
+  files.forEach(f=>{
+    const r = new FileReader();
+    r.onload = e=>{
+      const im = new Image();
+      im.onload = ()=>{
+        const MAX = 1280;
+        const sc = Math.min(1, MAX/Math.max(im.width, im.height));
+        const cv = document.createElement("canvas");
+        cv.width = Math.round(im.width*sc); cv.height = Math.round(im.height*sc);
+        cv.getContext("2d").drawImage(im,0,0,cv.width,cv.height);
+        const data = cv.toDataURL("image/jpeg",0.8);
+        const img = document.createElement("img");
+        img.src = data; img.className = "thumb";
+        document.getElementById("p_"+key).appendChild(img);
+        state[key] = state[key] || {};
+        state[key].photoData = state[key].photoData || [];
+        state[key].photoData.push(data);
+      };
+      im.src = e.target.result;
     };
-    im.src = e.target.result;
-  };
-  r.readAsDataURL(f);
+    r.readAsDataURL(f);
+  });
 }
 
 function dataURLtoFile(dataURL, name){
@@ -1038,23 +1043,26 @@ function updateBadge(){
 
 let zPhotoTemp = {};
 function addZPhoto(id, input){
-  const f = input.files[0]; if(!f) return;
-  const r = new FileReader();
-  r.onload = e=>{
-    const im = new Image();
-    im.onload = ()=>{
-      const MAX=1280, sc=Math.min(1,MAX/Math.max(im.width,im.height));
-      const cv=document.createElement("canvas");
-      cv.width=Math.round(im.width*sc); cv.height=Math.round(im.height*sc);
-      cv.getContext("2d").drawImage(im,0,0,cv.width,cv.height);
-      const data=cv.toDataURL("image/jpeg",0.8);
-      (zPhotoTemp[id]=zPhotoTemp[id]||[]).push(data);
-      const img=document.createElement("img"); img.src=data; img.className="thumb";
-      document.getElementById("zp_"+id).appendChild(img);
+  const files = Array.from(input.files || []);
+  input.value = "";
+  files.forEach(f=>{
+    const r = new FileReader();
+    r.onload = e=>{
+      const im = new Image();
+      im.onload = ()=>{
+        const MAX=1280, sc=Math.min(1,MAX/Math.max(im.width,im.height));
+        const cv=document.createElement("canvas");
+        cv.width=Math.round(im.width*sc); cv.height=Math.round(im.height*sc);
+        cv.getContext("2d").drawImage(im,0,0,cv.width,cv.height);
+        const data=cv.toDataURL("image/jpeg",0.8);
+        (zPhotoTemp[id]=zPhotoTemp[id]||[]).push(data);
+        const img=document.createElement("img"); img.src=data; img.className="thumb";
+        document.getElementById("zp_"+id).appendChild(img);
+      };
+      im.src=e.target.result;
     };
-    im.src=e.target.result;
-  };
-  r.readAsDataURL(f);
+    r.readAsDataURL(f);
+  });
 }
 
 function photoRow(ps){ return (ps&&ps.length)? "<div>"+ps.map(p=>`<img src="${p}" class="thumb">`).join("")+"</div>" : ""; }
@@ -1084,7 +1092,7 @@ function renderZesei(){
     if(z.status==="未是正" && role==="fix"){
       h += `<div style="margin-top:8px;">
         <textarea id="zc_${z.id}" placeholder="是正内容を記入"></textarea>
-        <label class="photo-btn">📷 是正後の写真を撮影<input type="file" accept="image/*" capture="environment" style="display:none" onchange="addZPhoto('${z.id}',this)"></label>
+        <label class="photo-btn">📷 撮影<input type="file" accept="image/*" capture="environment" style="display:none" onchange="addZPhoto('${z.id}',this)"></label>　<label class="photo-btn">🖼️ フォルダから選択<input type="file" accept="image/*" multiple style="display:none" onchange="addZPhoto('${z.id}',this)"></label>
         <div id="zp_${z.id}"></div>
         <button class="zbtn" style="background:var(--warn);" onclick="submitFix('${z.id}')">是正報告する</button></div>`;
     }
