@@ -73,6 +73,9 @@
   .zmeta{font-size:11px; color:#777; margin:4px 0;}
   .zbtn{width:100%; margin-top:8px; padding:11px 0; border:none; border-radius:8px; font-weight:bold; font-size:14px; color:#fff;}
   .deadline-over{color:var(--ng); font-weight:bold; font-size:12px;}
+  .hbtn{background:none; border:none; color:var(--blue); font-size:11px; font-weight:bold; padding:2px 4px; text-decoration:underline;}
+  .hint{display:none; background:#eef4ff; border:1px solid #cfe0f5; border-radius:8px; padding:8px 10px; font-size:12px; color:#334155; line-height:1.7; margin:6px 0; white-space:pre-wrap;}
+  .hint.show{display:block;}
 </style>
 </head>
 <body>
@@ -90,6 +93,28 @@
 
 <main>
 <div id="page-input">
+  <div class="card">
+    <details>
+      <summary style="font-weight:bold; color:var(--navy); cursor:pointer; font-size:14px;">📖 はじめての方へ（パトロールの流れ・見方のコツ）</summary>
+      <div style="font-size:13px; line-height:1.9; margin-top:10px;">
+        <b>■ パトロールの流れ</b><br>
+        ① 現場に着いたら、あいさつをしてヘルメット・反射ベストを着用<br>
+        ② 作業は止めず、まず現場の外周から「通行人の目線」で眺める<br>
+        ③ 各点検項目を「良好／要注意／要是正」でタップ（わからない項目は「？見るポイント」を開く）<br>
+        ④ 気になった箇所は写真を撮る（全景1枚＋近づいて1枚）<br>
+        ⑤ 良かった点も「良好・評価事項」に記入（褒めるのも大事な仕事です）<br>
+        ⑥ 最後に「プレビュー」→内容を確認して「確定」<br><br>
+        <b>■ 初心者の心得</b><br>
+        ・自分や家族がこの横を歩いたら危なくないか、という目線で見る<br>
+        ・専門的なことは現場代理人に質問してOK（質問すること自体が点検になります）<br>
+        ・判断に迷ったら「要注意」にして写真を残す（あとで安全担当者が確認します）<br><br>
+        <b>■ 撮影のコツ・マナー</b><br>
+        ・逆光を避け、指摘箇所が中央に写るように<br>
+        ・通行人の顔や住宅の表札が写り込まないよう配慮する<br>
+        ・作業の邪魔にならない位置から撮影する
+      </div>
+    </details>
+  </div>
   <div class="card">
     <h2>基本情報</h2>
     <label>工事名　<span style="color:#999">（設定タブで追加・変更できます）</span></label>
@@ -211,6 +236,8 @@
     <textarea id="ms_common" style="min-height:160px"></textarea>
     <label>③ 月間重点項目（毎月ここを差し替え）</label>
     <textarea id="ms_monthly" style="min-height:70px"></textarea>
+    <label>見るポイント（ヘルプ）の追加・上書き　※1行に「項目名｜説明」の形式。項目を追加・変更したらここにヘルプも追加してください</label>
+    <textarea id="ms_helps" style="min-height:110px" placeholder="例）舗装の仮復旧状態｜段差やひび割れがないか、実際に歩いて確認する"></textarea>
     <label>② 工種別重点モジュール</label>
     <div id="ms_modules"></div>
     <button class="zbtn" style="background:var(--blue);" onclick="addModule()">＋ 工種を追加</button>
@@ -234,6 +261,15 @@
     <label>メールアドレス（任意・メール併用する場合）</label>
     <input type="text" id="me_mail" placeholder="例）yamada@example.co.jp">
     <div class="actions"><button class="a-copy" onclick="saveMe()">自分の情報を保存</button></div>
+  </div>
+  <div class="card">
+    <h2>AI写真診断（β）</h2>
+    <div class="note" style="margin-bottom:6px;">Google Gemini のAPIキー（無料枠あり）を登録すると、点検入力で撮影した写真をAIが確認し、危険箇所の所見を提案します。取得方法：PCまたはスマホで aistudio.google.com/apikey を開き「APIキーを作成」→ コピーして下に貼り付け。<br>※写真はGoogleのAIサーバに送信されます。通行人の顔等が写る写真への配慮をお願いします。<br>※AIの所見は参考情報です。最終判断は必ず点検者が行ってください。<br>※キーはこの端末にのみ保存されます（端末ごとに設定）。</div>
+    <label>Gemini APIキー</label>
+    <input type="text" id="aiKey" placeholder="AIza…（未設定の場合、AI診断は使えません）">
+    <label>モデル名（通常は変更不要）</label>
+    <input type="text" id="aiModel" placeholder="gemini-2.0-flash">
+    <div class="actions"><button class="a-copy" onclick="saveAiCfg()">AI設定を保存</button></div>
   </div>
   <div class="card">
     <h2>自動同期設定（全員で是正台帳を共有）</h2>
@@ -341,6 +377,7 @@ let masters = (function(){
   ["sites","ptypes","common","monthly","modules"].forEach(k=>{
     if(!m[k]) m[k] = JSON.parse(JSON.stringify(DEFAULT_MASTERS[k]));
   });
+  if(!m.helps) m.helps = {}; // 管理者が追加・上書きする「見るポイント」（項目名→説明）
   return m;
 })();
 
@@ -366,13 +403,69 @@ function refreshSelects(){
   if([...el.options].some(o=>o.value===old)) el.value = old;
 }
 
+// ===== 初心者向けヘルプ（見るポイント） =====
+const HELP = {
+  "危険箇所への立入防止対策と現場の美化":"開口部や掘削箇所の周りに柵・バリケードが途切れなく設置され、人が入れる隙間がないか。ゴミや資材が散乱していないか。",
+  "個人保護具（PPE）の適正着用":"全員がヘルメットのあご紐を締めているか。反射ベスト・安全靴を着用しているか。1人でも未着用なら指摘対象です。",
+  "誘導体制の確立と車両・第三者対応":"ダンプや重機の出入りに誘導員が付いているか。歩行者や自転車が来たとき、作業を止めて安全に通しているか。",
+  "安全掲示板・法定掲示物の適正管理":"建設業許可票・施工体系図・緊急連絡先が掲示され、内容が今の工事と合っているか。古い掲示のままはNG。",
+  "安全通路の確保と段差の解消":"歩行者用の通路が確保され、段差に覆いやスロープがあるか。通路につまずく物が置かれていないか。実際に歩いてみる。",
+  "緊急時備品の設置と期限確認":"消火器・救急箱の場所がすぐ分かるか。消火器の点検期限が切れていないか（ラベルの日付を見る）。",
+  "周辺および作業環境への配慮":"騒音・粉じん・道路への泥の持ち出しへの対策（散水・タイヤ洗浄など）。近隣から見た印象も確認。",
+  "作業前・悪天候後の安全点検実施の確認":"朝のKY（危険予知）記録があるか。雨や台風の後に土留や仮設物を点検した記録・形跡があるか。",
+  "停車車両の安全管理（車止め・鍵）":"停めてある車両・重機のタイヤに車止め（歯止め）がかかっているか。キーの抜き忘れや無施錠がないか。",
+  "夜間・視界不良時の保安対策":"保安灯・回転灯が点灯するか（昼間でも点灯確認する）。看板に反射材が付いているか。",
+  "各種看板・標識の設置と転倒防止":"工事看板や規制標識が風で倒れないよう重りなどで固定されているか。文字がかすれて読めなくなっていないか。",
+  "ウェアラブルカメラの作動・装着状態":"作業員がカメラを装着し、電源が入っているか（ランプの点灯を確認）。",
+  "土留工（矢板・支保工）の設置状態・変状の有無":"矢板や支保工に「はらみ（ふくらみ）」「ずれ」「隙間からの水」がないか。目で見て変形があれば即指摘。",
+  "掘削深さに応じた土留・法面勾配の措置":"深さ1.5m以上なのに土留がない・壁が垂直のままの素掘りは重大な危険。昇り降り用の梯子があるかも確認。",
+  "埋設物（ガス・水道・電気・通信）の位置確認と防護":"ガス管・水道管の位置が地面にマーキングされ、その近くは機械でなく手掘りになっているか。",
+  "酸素欠乏・有害ガスの測定（マンホール・管内作業前）":"マンホールや管の中に入る前に測定器で測った記録があるか。測定せずに入るのは重大NG。",
+  "管内・狭所作業時の換気・監視人配置":"中で作業する人を外から見守る監視人がいるか。換気ファンが回っているか。",
+  "交通規制（規制図どおりの保安施設・誘導員配置）":"規制図と同じ位置にコーン・看板・誘導員が配置されているか。歩行者の通り道が安全か。",
+  "覆工板・仮復旧箇所の段差・ガタつき":"車が通るとガタガタ鳴る、段差があるなどは事故や苦情のもと。実際に歩いて確認する。",
+  "湧水・雨水対策（排水ポンプ・土砂流出防止）":"掘削箇所の底に水が溜まっていないか。排水ポンプが動くか。土砂が道路や側溝に流れ出ていないか。",
+  "既設管の断水・通水管理と誤操作防止":"バルブ（弁）に「操作禁止」等の表示や養生があり、誤って開け閉めできないようになっているか。",
+  "埋設物の位置確認と試掘結果の周知":"試掘の結果（他の管の位置）が図面や表示で作業員に知らされているか。",
+  "掘削箇所の土留・湧水対策":"掘削箇所の壁に変形やふくらみがないか、水が湧いていないか。",
+  "交通規制・歩行者通路の確保":"歩行者の通路の幅が確保され、覆いや案内表示があるか。",
+  "残土・資材の仮置きと第三者対策":"積んだ土や材料が崩れないか。子どもなど第三者が触れられない場所・囲いになっているか。",
+  "管の吊り込み・玉掛け作業の安全措置":"合図する人が決まっているか。吊り上げた荷物の下に人が入っていないか。",
+  "フルハーネス型墜落制止用器具の着用と親綱の使用":"斜面や高所で全員が着用し、フックを親綱に実際に掛けているか。着けているだけで掛けていないのはNG。",
+  "作業構台の手すり・中桟・幅木の設置状態":"手すり・中桟（中間の横棒）・幅木（足元の板）の3点が揃っているか。ぐらつきがないか。",
+  "斜面上のホース・ケーブル類の結束・整理":"斜面のホースやケーブルがずり落ちないよう結束・固定されているか。",
+  "油圧ユニット等の油漏れ対策（受けトレイ・吸着マット）":"機械の下に受けトレイやマットが敷いてあるか。地面に油の漏れた跡がないか。",
+  "落石・崩壊危険箇所の点検と立入禁止措置":"上の斜面に浮いた石がないか。危険な範囲がロープ等で立入禁止になっているか。",
+  "モノレール・索道等の運搬設備の点検":"点検記録があるか。決められた重さを超えて運んでいないか。",
+  "消火器等の視認性・アクセス性":"消火器が見える場所にあり、物に埋もれずすぐ取り出せるか。",
+  "感電防止（検電・停電作業手順・絶縁保護具）":"作業前に検電（電気が来ていないか確認）しているか。絶縁手袋などを使っているか。手順が掲示されているか。",
+  "蓄電池・電気設備周辺の火気管理と消火設備":"電池の近くに燃えやすい物や火気がないか。消火器が電気火災対応か（表示を見る）。",
+  "重量物（キュービクル・電池ユニット）の揚重計画と地盤養生":"吊り上げの計画書があるか。クレーンの足元の地盤に鉄板などの養生がされているか。",
+  "高圧部への立入禁止・標識の表示":"高電圧部分に柵と「危険・高電圧」表示があり、近づけないようになっているか。",
+  "作業者の電気工事資格・特別教育の確認":"作業者の資格証や特別教育の記録を確認したか。",
+  "緊急時（電気火災）の対応手順の周知":"電気火災が起きたときの対応手順が掲示され、作業員が説明できるか。",
+  "熱中症対策：WBGT測定、休憩・水分塩分補給、体調確認":"WBGT計（暑さ指数計）が現場にあり、値に応じて休憩を増やしているか。飲み物と塩分の備えがあるか。作業員の顔色も見る。",
+  "夕立・ゲリラ豪雨時の掘削箇所養生・避難手順の周知":"急な大雨のとき、どう避難しどう掘削箇所を守るか、作業員が答えられるか聞いてみる。",
+  "バックホウ旋回範囲の立入管理（前月ヒヤリ多発事項）":"重機の回転する範囲にロープやコーンで人が入れないようになっているか。誘導員の立ち位置は安全か。"
+};
+function helpFor(text){
+  // 優先順位：管理者が設定したヘルプ → 標準ヘルプ → 汎用の案内
+  if(masters.helps && masters.helps[text]) return masters.helps[text];
+  return HELP[text] || "現場の実際の状態が、決められたルール（施工計画・規制図・手順書）どおりかを確認します。少しでも「危ないかも」と感じたら写真を撮り、「要注意」にして記録してください。判断は安全担当者が後で確認します。（※この項目の詳しい見るポイントは、管理者が設定タブから追加できます）";
+}
+function toggleHelp(key){
+  document.getElementById("h_"+key).classList.toggle("show");
+}
+
 const LEVELS = [["ok","良好"],["warn","要注意"],["ng","要是正"],["na","対象外"]];
 let state = {};
 
 function itemHTML(group, idx, text){
   const key = group + "_" + idx;
+  const esc = s=>String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;");
   return `<div class="item" id="it_${key}">
-    <div class="q">${text}</div>
+    <div class="q">${text}　<button class="hbtn" onclick="toggleHelp('${key}')">？見るポイント</button></div>
+    <div class="hint" id="h_${key}">💡 ${esc(helpFor(text))}</div>
     <div class="btns">` +
     LEVELS.map(l=>`<button id="b_${key}_${l[0]}" onclick="setLevel('${key}','${l[0]}')">${l[1]}</button>`).join("") +
     `</div>
@@ -383,8 +476,64 @@ function itemHTML(group, idx, text){
         <input type="file" accept="image/*" capture="environment" style="display:none" onchange="addPhoto('${key}',this)">
       </label>
       <div id="p_${key}"></div>
+      <div style="margin-top:4px;">
+        <button class="hbtn" onclick="aiDiagnose('${key}')">🤖 AI写真診断（β）</button>
+        <button class="hbtn" onclick="aiToComment('${key}')">診断を指摘内容へ反映</button>
+      </div>
+      <div class="hint" id="ai_${key}"></div>
     </div>
   </div>`;
+}
+
+// ===== AI写真診断（β／Google Gemini API） =====
+function saveAiCfg(){
+  lsSet("anpat_aikey", document.getElementById("aiKey").value.trim());
+  lsSet("anpat_aimodel", document.getElementById("aiModel").value.trim() || "gemini-2.0-flash");
+  alert("AI診断設定を保存しました（キーはこの端末にのみ保存されます）。");
+}
+async function aiDiagnose(key){
+  const apiKey = lsGet("anpat_aikey","");
+  if(!apiKey){ alert("設定タブの「AI写真診断」でGemini APIキーを登録してください（無料枠あり・取得方法は設定タブ参照）。"); return; }
+  const s = state[key];
+  if(!s || !s.photoData || !s.photoData.length){ alert("先に写真を撮影してください。"); return; }
+  const model = lsGet("anpat_aimodel","gemini-2.0-flash");
+  const out = document.getElementById("ai_"+key);
+  out.classList.add("show");
+  out.textContent = "🤖 AI診断中…（10秒ほどお待ちください）";
+  const parts = [{text:
+    "あなたは建設現場の安全パトロールの専門家です。次の写真を、点検項目「"+itemText(key)+"」の観点で確認し、日本語で簡潔に診断してください。\n"
+    +"・冒頭に【要是正候補】【要注意候補】【良好】のいずれかを付ける\n"
+    +"・危険箇所や不備は位置・対象物を具体的に\n"
+    +"・写真から判断できないことは推測せず「写真からは確認できない」と書く\n"
+    +"・全体で3行以内"}];
+  s.photoData.forEach(p=>{
+    parts.push({inline_data:{mime_type:"image/jpeg", data:p.split(",")[1]}});
+  });
+  try{
+    const r = await fetch("https://generativelanguage.googleapis.com/v1beta/models/"+encodeURIComponent(model)+":generateContent?key="+encodeURIComponent(apiKey), {
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({contents:[{parts:parts}]})
+    });
+    const d = await r.json();
+    const txt = (d && d.candidates && d.candidates[0] && d.candidates[0].content && d.candidates[0].content.parts)
+      ? d.candidates[0].content.parts.map(p=>p.text||"").join("").trim() : "";
+    if(!txt){
+      out.textContent = "🤖 診断できませんでした。APIキー・モデル名・通信状況を確認してください。"
+        + (d && d.error && d.error.message ? "\n詳細：" + d.error.message : "");
+      return;
+    }
+    s.aiResult = txt;
+    out.textContent = "🤖 " + txt + "\n――\n※AIの参考所見です。最終判断は必ず点検者が行ってください。";
+  }catch(e){
+    out.textContent = "🤖 診断に失敗しました（通信エラー）。電波状況を確認してください。";
+  }
+}
+function aiToComment(key){
+  const s = state[key];
+  if(!s || !s.aiResult){ alert("先に「AI写真診断」を実行してください。"); return; }
+  const ta = document.getElementById("c_"+key);
+  ta.value = (ta.value ? ta.value + "\n" : "") + "（AI所見）" + s.aiResult;
 }
 
 function render(){
@@ -1094,10 +1243,14 @@ function renderConfig(){
   document.getElementById("me_mail").value = me.mail||"";
   document.getElementById("syncUrl").value = getSyncUrl();
   document.getElementById("adminKey").value = lsGet("anpat_adminkey","");
+  document.getElementById("aiKey").value = lsGet("anpat_aikey","");
+  document.getElementById("aiModel").value = lsGet("anpat_aimodel","gemini-2.0-flash");
   document.getElementById("ms_sites").value = masters.sites.join("\n");
   document.getElementById("ms_ptypes").value = masters.ptypes.join("\n");
   document.getElementById("ms_common").value = masters.common.join("\n");
   document.getElementById("ms_monthly").value = masters.monthly.join("\n");
+  document.getElementById("ms_helps").value =
+    Object.entries(masters.helps||{}).map(e=>e[0]+"｜"+e[1]).join("\n");
   renderModulesEditor();
   renderRoutes();
   applyAdminLock();
@@ -1126,6 +1279,12 @@ function collectMastersFromUI(){
   masters.ptypes = lines("ms_ptypes");
   masters.common = lines("ms_common");
   masters.monthly = lines("ms_monthly");
+  masters.helps = {};
+  lines("ms_helps").forEach(l=>{
+    const sep = l.includes("｜") ? "｜" : "|";
+    const i = l.indexOf(sep);
+    if(i > 0) masters.helps[l.slice(0,i).trim()] = l.slice(i+sep.length).trim();
+  });
   masters.modules = masters.modules.map((m,i)=>{
     const n = document.getElementById("mm_name_"+i);
     const it = document.getElementById("mm_items_"+i);
