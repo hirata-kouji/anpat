@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="theme-color" content="#1f3864">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="icon-192.png">
@@ -62,7 +62,7 @@
   .note{font-size:11px; color:#888; margin-top:8px; line-height:1.6;}
   #page-report{display:none;}
   .tabs{display:flex; gap:6px; margin-top:10px;}
-  .tab{flex:1; padding:8px 0; border:none; border-radius:8px; background:rgba(255,255,255,.15); color:#fff; font-size:13px; font-weight:bold;}
+  .tab{flex:1; padding:8px 0; border:none; border-radius:8px; background:rgba(255,255,255,.15); color:#fff; font-size:12px; font-weight:bold;}
   .tab.active{background:#fff; color:var(--navy);}
   .zbadge{background:var(--ng); color:#fff; border-radius:9px; padding:1px 7px; font-size:11px;}
   .chip{display:inline-block; font-size:11px; font-weight:bold; padding:3px 10px; border-radius:12px;}
@@ -82,6 +82,7 @@
   <nav class="tabs">
     <button class="tab active" id="tab-input" onclick="showPage('input')">点検入力</button>
     <button class="tab" id="tab-zesei" onclick="showPage('zesei')">是正管理 <span class="zbadge" id="zbadge" style="display:none">0</span></button>
+    <button class="tab" id="tab-notif" onclick="showPage('notif')">通知 <span class="zbadge" id="nbadge" style="display:none">0</span></button>
     <button class="tab" id="tab-bunseki" onclick="showPage('bunseki')">集計</button>
     <button class="tab" id="tab-config" onclick="showPage('config')">設定</button>
   </nav>
@@ -169,6 +170,19 @@
   </div>
 </div>
 
+<div id="page-notif" style="display:none">
+  <div class="card">
+    <h2>通知（是正依頼・是正報告・上司への報告をアプリ内でやり取り）</h2>
+    <label>表示</label>
+    <select id="nfilter" onchange="renderNotif()">
+      <option value="mine">自分宛て</option>
+      <option value="all">すべて</option>
+    </select>
+    <div id="nlist" style="margin-top:12px;"></div>
+    <div class="note">※通知は同期のタイミング（アプリ起動時・タブ切替時・各操作時）で届きます。宛先の照合には設定タブ「自分の情報」の氏名・役職を使用します。</div>
+  </div>
+</div>
+
 <div id="page-bunseki" style="display:none">
   <div class="card">
     <h2>集計・傾向分析</h2>
@@ -210,6 +224,16 @@
     <div class="note" style="margin-bottom:6px;">是正完了の承認時に、どの役職へ報告するかを種別ごとに設定します（例：店社・重点パトは常務以上へ）。メールアドレスを入れると宛先も自動セットされます。</div>
     <div id="routelist"></div>
     <div class="actions"><button class="a-copy" onclick="saveRoutes()">設定を保存</button></div>
+  </div>
+  <div class="card">
+    <h2>自分の情報（通知の宛先照合用）</h2>
+    <label>氏名（点検者名・現場担当者名と同じ表記にしてください）</label>
+    <input type="text" id="me_name" placeholder="例）山田太郎">
+    <label>役職（上司として報告を受ける方のみ。報告先設定の役職名と同じ表記に）</label>
+    <input type="text" id="me_yaku" placeholder="例）常務以上／土木部長／安全担当者">
+    <label>メールアドレス（任意・メール併用する場合）</label>
+    <input type="text" id="me_mail" placeholder="例）yamada@example.co.jp">
+    <div class="actions"><button class="a-copy" onclick="saveMe()">自分の情報を保存</button></div>
   </div>
   <div class="card">
     <h2>自動同期設定（全員で是正台帳を共有）</h2>
@@ -503,6 +527,17 @@ function confirmReport(){
       inspector:lastMeta.inspector, tanto:lastMeta.tanto, ng:lastNg.length, total:totalItems()});
     lsSet("anpat_reports", reports);
     saveTanto();
+    // アプリ内通知：担当者へ是正依頼（報告書添付）、上司へ安パト報告
+    const rtN = routes[lastMeta.ptype]||{yaku:"上司"};
+    if(lastNg.length && lastMeta.tanto && lastMeta.tanto!=="（未記入）"){
+      const dlN = new Date(lastMeta.date); dlN.setDate(dlN.getDate()+7);
+      notify({name:lastMeta.tanto}, "是正依頼",
+        "【是正依頼】"+lastMeta.site+"（要是正"+lastNg.length+"件・期限 "+dlN.toISOString().slice(0,10)+"）",
+        lastText, null);
+    }
+    notify({role:rtN.yaku}, "安パト報告",
+      "【安パト報告】"+lastMeta.site+" "+lastMeta.date+"（要是正"+lastNg.length+"件）",
+      lastText, null);
     madeRegistered = true;
     syncNow(false);
   }
@@ -512,11 +547,11 @@ function confirmReport(){
   document.getElementById("finalActions").style.display = "block";
   window.scrollTo(0,0);
   if(lastNg.length){
-    if(confirm("確定しました。要是正 "+lastNg.length+" 件を「是正管理」に登録しました。\n担当者（"+(lastMeta.tanto||"未記入")+"）へ是正依頼メールを作成しますか？")){
+    if(confirm("確定しました。要是正 "+lastNg.length+" 件を「是正管理」に登録し、担当者（"+(lastMeta.tanto||"未記入")+"）と上司へアプリ内通知を送りました。\nメールでも是正依頼を送りますか？")){
       sendTantoMail();
     }
   } else {
-    alert("確定しました（要是正はありません）。");
+    alert("確定しました（要是正はありません）。上司へ安パト報告の通知を送りました。");
   }
 }
 
@@ -675,6 +710,87 @@ ${body}<script>setTimeout(function(){window.print();},500);<\/script></body></ht
   w.document.write(html); w.document.close();
 }
 
+// ===== アプリ内通知 =====
+function getMe(){ return lsGet("anpat_me", {name:"", yaku:"", mail:""}); }
+function saveMe(){
+  const me = {
+    name: document.getElementById("me_name").value.trim(),
+    yaku: document.getElementById("me_yaku").value.trim(),
+    mail: document.getElementById("me_mail").value.trim()
+  };
+  lsSet("anpat_me", me);
+  updateNotifBadge();
+  alert("自分の情報を保存しました。氏名・役職に一致する通知が「通知」タブに届きます。");
+}
+function allStore(){ return lsGet("anpat_reports", []); }
+function notifList(){ return allStore().filter(r=>r.kind==="notif"); }
+function notify(to, type, title, body, zid){
+  const me = getMe();
+  const store = allStore();
+  store.push({
+    id: "n"+Date.now()+Math.floor(Math.random()*1000),
+    kind: "notif", ts: Date.now(), date: new Date().toISOString().slice(0,10),
+    from: me.name || "（無記名）", to: to, type: type, title: title, body: body, zid: zid||null, read: {}
+  });
+  lsSet("anpat_reports", store);
+  updateNotifBadge();
+}
+function isMine(n){
+  const me = getMe();
+  if(!n.to) return false;
+  if(n.to.name && me.name && n.to.name===me.name) return true;
+  if(n.to.role && me.yaku && n.to.role===me.yaku) return true;
+  return false;
+}
+function updateNotifBadge(){
+  const me = getMe();
+  const key = me.name || "me";
+  const n = notifList().filter(x=>isMine(x) && !(x.read && x.read[key])).length;
+  const b = document.getElementById("nbadge");
+  if(b){ b.textContent = n; b.style.display = n? "" : "none"; }
+}
+const NTYPE_COLOR = {"是正依頼":"s-open","是正報告":"s-fixed","安パト報告":"s-fixed","是正完了":"s-done","是正完了報告":"s-done"};
+function renderNotif(){
+  updateNotifBadge();
+  const me = getMe();
+  const key = me.name || "me";
+  const mode = document.getElementById("nfilter").value;
+  const wrap = document.getElementById("nlist");
+  let list = notifList().slice().sort((a,b)=>(b.ts||0)-(a.ts||0));
+  if(mode==="mine"){
+    if(!me.name && !me.yaku){
+      wrap.innerHTML = '<div class="note">設定タブの「自分の情報」で氏名（と役職）を保存すると、自分宛ての通知が表示されます。</div>';
+      return;
+    }
+    list = list.filter(isMine);
+  }
+  if(!list.length){ wrap.innerHTML = '<div class="note">通知はありません。</div>'; return; }
+  const esc = s=>String(s==null?"":s).replace(/&/g,"&amp;").replace(/</g,"&lt;");
+  wrap.innerHTML = list.map(n=>{
+    const unread = isMine(n) && !(n.read && n.read[key]);
+    const toStr = n.to? (n.to.name? esc(n.to.name)+" さん" : esc(n.to.role)+" 宛") : "";
+    return `<div class="zcard" style="${unread? "border-color:var(--ng);":""}">
+      <span class="chip ${NTYPE_COLOR[n.type]||"s-fixed"}">${esc(n.type)}</span>${unread? ' <span class="deadline-over">未読</span>':""}
+      <div style="font-weight:bold; margin-top:6px;">${esc(n.title)}</div>
+      <div class="zmeta">${esc(n.date)}｜${esc(n.from)} → ${toStr}</div>
+      <div style="font-size:13px; white-space:pre-wrap; margin-top:4px;">${esc(n.body)}</div>
+      <div class="actions">
+        ${n.zid? '<button class="a-back" onclick="showPage(\'zesei\')">是正管理で開く</button>' : ""}
+        ${unread? `<button class="a-copy" onclick="markRead('${n.id}')">既読にする</button>` : ""}
+      </div>
+    </div>`;
+  }).join("");
+}
+function markRead(id){
+  const me = getMe();
+  const key = me.name || "me";
+  const store = allStore();
+  const n = store.find(x=>x.id===id);
+  if(n){ n.read = n.read || {}; n.read[key] = true; lsSet("anpat_reports", store); }
+  renderNotif();
+  syncNow(false);
+}
+
 // ===== 集計・傾向分析 =====
 // 指摘の区分（共通／工種別／月間重点）。旧データは項目名からマスタ照合で判定
 function itemCat(z){
@@ -690,7 +806,7 @@ function bnBar(label, count, max, color){
     <div style="background:#e3e8f2;border-radius:4px;height:14px;"><div style="width:${w}%;height:14px;border-radius:4px;background:${color};"></div></div></div>`;
 }
 function renderBunseki(){
-  const reports = lsGet("anpat_reports", []);
+  const reports = lsGet("anpat_reports", []).filter(r=>!r.kind); // 通知データは集計から除外
   const todayS = new Date().toISOString().slice(0,10);
   const done = ledger.filter(z=>z.status==="完了");
   const over = ledger.filter(z=>z.status!=="完了" && z.deadline<todayS).length;
@@ -849,6 +965,11 @@ function submitFix(id){
   z.status = "是正報告済";
   delete zPhotoTemp[id];
   lsSet("anpat_ledger", ledger); renderZesei();
+  // アプリ内通知：安パト者（点検者）へ是正報告
+  notify({name:z.inspector}, "是正報告",
+    "【是正報告】"+z.site,
+    "指摘事項："+z.item+"\n是正日："+z.fix.date+(z.fix.comment?("\n是正内容："+z.fix.comment):"")+"\n（是正後の写真は「是正管理」で確認し、承認してください）",
+    z.id);
   syncNow(false);
 }
 
@@ -856,7 +977,6 @@ function approveFix(id){
   const z = ledger.find(x=>x.id===id); if(!z) return;
   z.status = "完了"; z.approved = {date:new Date().toISOString().slice(0,10)};
   lsSet("anpat_ledger", ledger); renderZesei();
-  syncNow(false);
   const rt = routes[z.ptype]||{yaku:"上司", mail:""};
   const body = "安全パトロール是正完了報告\n\n"
     + "報告先　：" + rt.yaku + "\n"
@@ -868,7 +988,14 @@ function approveFix(id){
     + "是正報告：" + (z.fix? z.fix.date : "") + "　" + (z.fix && z.fix.comment? z.fix.comment : "") + "\n"
     + "承認日　：" + z.approved.date + "\n\n"
     + "※是正前後の写真はアプリの是正管理台帳をご確認ください。";
-  if(confirm("承認しました。" + rt.yaku + " へ完了報告メールを作成しますか？")){
+  // アプリ内通知：上司へ是正完了報告、担当者へ完了連絡
+  notify({role:rt.yaku}, "是正完了報告", "【是正完了報告】"+z.site, body, z.id);
+  if(z.tanto && z.tanto!=="（未記入）"){
+    notify({name:z.tanto}, "是正完了", "【是正完了】"+z.site,
+      "指摘事項："+z.item+"\n承認日："+z.approved.date+"\n是正を確認しました。ありがとうございました。", z.id);
+  }
+  syncNow(false);
+  if(confirm("承認しました。" + rt.yaku + " と担当者へアプリ内通知を送りました。\nメールでも完了報告を送りますか？")){
     location.href = "mailto:" + encodeURIComponent(rt.mail||"")
       + "?subject=" + encodeURIComponent("【安パト是正完了】" + z.site)
       + "&body=" + encodeURIComponent(body);
@@ -923,7 +1050,9 @@ function syncNow(showResult){
         if(document.getElementById("page-config").style.display==="block") renderConfig();
       }
       updateBadge();
+      updateNotifBadge();
       if(document.getElementById("page-zesei").style.display==="block") renderZesei();
+      if(document.getElementById("page-notif").style.display==="block") renderNotif();
       if(document.getElementById("page-bunseki").style.display==="block") renderBunseki();
       setSyncStatus("同期：完了（"+new Date().toLocaleTimeString()+"）　台帳 "+ledger.length+" 件");
       if(showResult) alert("同期しました（台帳 "+ledger.length+" 件）");
@@ -959,6 +1088,10 @@ function saveRoutes(){
 
 // ===== マスタ設定エディタ =====
 function renderConfig(){
+  const me = getMe();
+  document.getElementById("me_name").value = me.name||"";
+  document.getElementById("me_yaku").value = me.yaku||"";
+  document.getElementById("me_mail").value = me.mail||"";
   document.getElementById("syncUrl").value = getSyncUrl();
   document.getElementById("adminKey").value = lsGet("anpat_adminkey","");
   document.getElementById("ms_sites").value = masters.sites.join("\n");
@@ -1035,14 +1168,15 @@ function resetMasters(){
 }
 
 function showPage(p){
-  const pages = {input:"page-input", zesei:"page-zesei", bunseki:"page-bunseki", config:"page-config"};
+  const pages = {input:"page-input", zesei:"page-zesei", notif:"page-notif", bunseki:"page-bunseki", config:"page-config"};
   for(const k in pages) document.getElementById(pages[k]).style.display = (k===p)?"block":"none";
   document.getElementById("page-report").style.display = "none";
   document.getElementById("progressbar").style.display = (p==="input")?"flex":"none";
-  ["input","zesei","bunseki","config"].forEach(k=>{
+  ["input","zesei","notif","bunseki","config"].forEach(k=>{
     document.getElementById("tab-"+k).className = "tab"+(k===p?" active":"");
   });
   if(p==="zesei"){ renderZesei(); syncNow(false); }
+  if(p==="notif"){ renderNotif(); syncNow(false); }
   if(p==="bunseki"){ renderBunseki(); syncNow(false); }
   if(p==="config") renderConfig();
   window.scrollTo(0,0);
@@ -1053,6 +1187,7 @@ refreshSelects();
 fillTanto();
 render();
 updateBadge();
+updateNotifBadge();
 syncNow(false); // 起動時に自動同期（URL未設定時は何もしない）
 
 // PWA：https配信時のみオフライン用サービスワーカーを登録（単体ファイル利用時は無害に無視）
