@@ -263,18 +263,6 @@
     <div class="actions"><button class="a-copy" onclick="saveMe()">自分の情報を保存</button></div>
   </div>
   <div class="card">
-    <h2>AI写真診断（β）</h2>
-    <div class="note" style="margin-bottom:6px;"><b>通常、この画面での設定は不要です。</b>管理者が同期サーバ（Apps Script）にAIキーを1回設定すれば、同期URLを登録済みの全端末でAI診断が使えます（設定方法は配布資料「同期サーバ設定手順」参照）。<br>※写真はGoogleのAIサーバに送信されます。通行人の顔等が写る写真への配慮をお願いします。<br>※AIの所見は参考情報です。最終判断は必ず点検者が行ってください。</div>
-    <details>
-      <summary style="font-size:12px; color:var(--blue); cursor:pointer;">上級者向け：この端末専用のAPIキーを使う場合（任意）</summary>
-      <label>Gemini APIキー（この端末のみ有効）</label>
-      <input type="text" id="aiKey" placeholder="AIza…（通常は空欄のまま）">
-      <label>モデル名（通常は変更不要）</label>
-      <input type="text" id="aiModel" placeholder="gemini-2.5-flash">
-      <div class="actions"><button class="a-copy" onclick="saveAiCfg()">AI設定を保存</button></div>
-    </details>
-  </div>
-  <div class="card">
     <h2>自動同期設定（全員で是正台帳を共有）</h2>
     <div class="note" style="margin-bottom:6px;">会社のGoogleアカウントで無料の同期サーバ（Google Apps Script）を1つ作成し、そのURLを登録すると、是正台帳と集計データが全員のスマホと自動で同期されます（報告書確定・是正報告・承認のたびに送受信）。作成手順は配布資料「同期サーバ設定手順」を参照してください。</div>
     <label>同期URL（https://script.google.com/macros/s/…/exec）</label>
@@ -482,11 +470,6 @@ function itemHTML(group, idx, text){
         <input type="file" accept="image/*" multiple style="display:none" onchange="addPhoto('${key}',this)">
       </label>
       <div id="p_${key}"></div>
-      <div style="margin-top:4px;">
-        <button class="hbtn" onclick="aiDiagnose('${key}')">🤖 AI写真診断（β）</button>
-        <button class="hbtn" onclick="aiToComment('${key}')">診断を指摘内容へ反映</button>
-      </div>
-      <div class="hint" id="ai_${key}"></div>
     </div>
   </div>`;
 }
@@ -1331,10 +1314,6 @@ function renderConfig(){
   document.getElementById("me_mail").value = me.mail||"";
   document.getElementById("syncUrl").value = getSyncUrl();
   document.getElementById("adminKey").value = lsGet("anpat_adminkey","");
-  document.getElementById("aiKey").value = lsGet("anpat_aikey","");
-  let cfgModel = lsGet("anpat_aimodel","gemini-2.5-flash");
-  if(/^gemini-2\.0/.test(cfgModel)){ cfgModel = "gemini-2.5-flash"; lsSet("anpat_aimodel", cfgModel); }
-  document.getElementById("aiModel").value = cfgModel;
   document.getElementById("ms_sites").value = masters.sites.join("\n");
   document.getElementById("ms_ptypes").value = masters.ptypes.join("\n");
   document.getElementById("ms_common").value = masters.common.join("\n");
