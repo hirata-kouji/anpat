@@ -494,22 +494,21 @@ function saveAiCfg(){
   lsSet("anpat_aimodel", document.getElementById("aiModel").value.trim() || "gemini-2.5-flash");
   alert("AI診断設定を保存しました（キーはこの端末にのみ保存されます）。");
 }
-// 利用可能な最新のGeminiモデルをAPIから自動検出（世代交代への対応）
-async function pickAiModel(apiKey){
+// 利用可能なGeminiモデルの候補リストをAPIから自動取得（新しいflash→flash-lite→その他の順）
+async function listAiModels(apiKey){
   try{
     const r = await fetch("https://generativelanguage.googleapis.com/v1beta/models?pageSize=200&key="+encodeURIComponent(apiKey));
     const d = await r.json();
     const names = (d.models||[])
       .filter(m=>(m.supportedGenerationMethods||[]).includes("generateContent"))
       .map(m=>String(m.name||"").replace(/^models\//,""))
-      .filter(n=>/^gemini-[\d.]+/.test(n) && !/embedding|tts|image|audio|live|thinking/.test(n));
-    if(!names.length) return null;
+      .filter(n=>/^gemini-[\d.]+/.test(n) && !/embedding|tts|image-|audio|live|thinking|exp/.test(n));
     const ver = n=>parseFloat((n.match(/^gemini-([\d.]+)/)||[])[1]||"0");
-    // flash系（軽量・高速）を優先し、バージョンの新しい順
     const flash = names.filter(n=>/flash/.test(n) && !/lite/.test(n)).sort((a,b)=>ver(b)-ver(a));
-    const any = names.slice().sort((a,b)=>ver(b)-ver(a));
-    return (flash[0] || any[0]) || null;
-  }catch(e){ return null; }
+    const lite = names.filter(n=>/flash/.test(n) && /lite/.test(n)).sort((a,b)=>ver(b)-ver(a));
+    const rest = names.filter(n=>!/flash/.test(n)).sort((a,b)=>ver(b)-ver(a));
+    return [...new Set([...flash, ...lite, ...rest])];
+  }catch(e){ return []; }
 }
 
 async function aiDiagnose(key){
@@ -539,24 +538,35 @@ async function aiDiagnose(key){
     });
     return r.json();
   };
+  const getTxt = d => (d && d.candidates && d.candidates[0] && d.candidates[0].content && d.candidates[0].content.parts)
+    ? d.candidates[0].content.parts.map(p=>p.text||"").join("").trim() : "";
+  // モデル廃止・混雑・上限のエラーなら別モデルへ切り替えて再試行する
+  const retryable = d => d && d.error && (
+    d.error.code===404 || d.error.code===429 || d.error.code===503 ||
+    /no longer available|not found|not supported|high demand|overloaded|try again|quota|unavailable/i.test(String(d.error.message||""))
+  );
   try{
     let d = await doReq(model);
-    // モデルが使えない場合は、利用可能な最新モデルを自動検出して再試行
-    const errMsg = d && d.error ? String(d.error.message||"") : "";
-    if(d && d.error && (d.error.code===404 || /no longer available|not found|not supported/i.test(errMsg))){
-      out.textContent = "🤖 モデルを自動更新しています…";
-      const newModel = await pickAiModel(apiKey);
-      if(newModel && newModel!==model){
-        model = newModel;
-        lsSet("anpat_aimodel", model);
-        d = await doReq(model);
+    if(retryable(d)){
+      out.textContent = "🤖 混雑・モデル更新のため、別モデルで再試行しています…";
+      const list = await listAiModels(apiKey);
+      const tried = new Set([model]);
+      for(const m of list){
+        if(tried.has(m)) continue;
+        tried.add(m);
+        if(tried.size > 5) break; // 最大4モデルまで試す
+        out.textContent = "🤖 再試行中…（" + m + "）";
+        d = await doReq(m);
+        if(!d || !d.error){ model = m; lsSet("anpat_aimodel", model); break; }
+        if(!retryable(d)) break;
       }
     }
-    const txt = (d && d.candidates && d.candidates[0] && d.candidates[0].content && d.candidates[0].content.parts)
-      ? d.candidates[0].content.parts.map(p=>p.text||"").join("").trim() : "";
+    const txt = getTxt(d);
     if(!txt){
-      out.textContent = "🤖 診断できませんでした。APIキー・通信状況を確認してください。"
-        + (d && d.error && d.error.message ? "\n詳細：" + d.error.message : "");
+      const em = d && d.error && d.error.message ? String(d.error.message) : "";
+      out.textContent = /high demand|overloaded|try again|quota/i.test(em)
+        ? "🤖 現在AIが混み合っています（無料枠の一時的な制限）。1〜2分おいて、もう一度「AI写真診断」を押してください。"
+        : "🤖 診断できませんでした。APIキー・通信状況を確認してください。" + (em? "\n詳細：" + em : "");
       return;
     }
     s.aiResult = txt;
