@@ -76,6 +76,9 @@
   .hbtn{background:none; border:none; color:var(--blue); font-size:11px; font-weight:bold; padding:2px 4px; text-decoration:underline;}
   .hint{display:none; background:#eef4ff; border:1px solid #cfe0f5; border-radius:8px; padding:8px 10px; font-size:12px; color:#334155; line-height:1.7; margin:6px 0; white-space:pre-wrap;}
   .hint.show{display:block;}
+  .pwrap{position:relative; display:inline-block; margin:6px 6px 0 0;}
+  .pwrap img{margin:0;}
+  .pdel{position:absolute; top:-6px; right:-6px; background:var(--ng); color:#fff; border:2px solid #fff; border-radius:50%; width:22px; height:22px; font-size:12px; font-weight:bold; line-height:1; padding:0;}
 </style>
 </head>
 <body>
@@ -184,9 +187,16 @@
       <option value="fix">被点検者（是正報告）</option>
     </select>
     <div id="zlist" style="margin-top:12px;"></div>
+    <div style="border-top:1px solid var(--line); margin-top:12px; padding-top:8px;">
+      <label>正式報告書の出力（社外提出用・チェック項目一覧＋是正報告・完了報告込み）</label>
+      <select id="repSel"></select>
+      <div class="actions">
+        <button class="a-copy" onclick="printOfficialReport()">正式報告書を出力（PDF）</button>
+      </div>
+    </div>
     <div class="actions">
-      <button class="a-copy" onclick="printLedgerReport()">報告書出力（PDF）</button>
-      <button class="a-copy" onclick="exportLedgerCSV()">Excel出力（CSV）</button>
+      <button class="a-back" onclick="printLedgerReport()">是正一覧出力（PDF）</button>
+      <button class="a-back" onclick="exportLedgerCSV()">Excel出力（CSV）</button>
     </div>
     <div class="actions">
       <button class="a-back" onclick="syncNow(true)">今すぐ同期</button>
@@ -220,6 +230,11 @@
   <div class="card"><h2>月別推移（パトロール回数／指摘件数）</h2><div id="bn_months"></div>
     <div class="actions"><button class="a-copy" onclick="exportLedgerCSV()">分析データをExcel出力（CSV）</button></div>
     <div class="note">※集計対象はこの端末に蓄積された確定済み報告書と是正台帳です。全端末のデータを統合した全社集計はAppSheet版で実現します。</div>
+  </div>
+  <div class="card">
+    <h2 id="bn_arch_title">アーカイブ（完了・承認済の是正案件）</h2>
+    <div id="bn_archive"></div>
+    <div class="note">※完了・承認済みの案件は是正管理タブから自動的にこちらへ移動して保管されます（集計・CSV・正式報告書には引き続き含まれます）。</div>
   </div>
 </div>
 
@@ -631,6 +646,20 @@ function setLevel(key, lv){
   updateProgress();
 }
 
+// 写真サムネイルを削除ボタン付きで描画
+function renderPhotos(key){
+  const box = document.getElementById("p_"+key);
+  if(!box) return;
+  const ps = (state[key] && state[key].photoData) || [];
+  box.innerHTML = ps.map((p,i)=>
+    `<span class="pwrap"><img src="${p}" class="thumb"><button class="pdel" onclick="delPhoto('${key}',${i})">✕</button></span>`
+  ).join("");
+}
+function delPhoto(key, i){
+  if(!state[key] || !state[key].photoData) return;
+  state[key].photoData.splice(i, 1);
+  renderPhotos(key);
+}
 function addPhoto(key, input){
   // 撮影・フォルダ選択（複数可）の両方に対応。画像は縮小して保持
   const files = Array.from(input.files || []);
@@ -646,12 +675,10 @@ function addPhoto(key, input){
         cv.width = Math.round(im.width*sc); cv.height = Math.round(im.height*sc);
         cv.getContext("2d").drawImage(im,0,0,cv.width,cv.height);
         const data = cv.toDataURL("image/jpeg",0.8);
-        const img = document.createElement("img");
-        img.src = data; img.className = "thumb";
-        document.getElementById("p_"+key).appendChild(img);
         state[key] = state[key] || {};
         state[key].photoData = state[key].photoData || [];
         state[key].photoData.push(data);
+        renderPhotos(key);
       };
       im.src = e.target.result;
     };
@@ -686,7 +713,7 @@ function itemText(key){
   return masters.monthly[+i];
 }
 
-let lastText = "", lastPhotos = [], lastMeta = {}, lastNg = [];
+let lastText = "", lastPhotos = [], lastMeta = {}, lastNg = [], lastAll = [];
 
 // 担当者の記憶（工事名ごとに保存・自動入力）
 function fillTanto(){
@@ -724,10 +751,12 @@ function sendTantoMail(){
 // プレビュー確定：是正台帳へ登録・報告書を蓄積し、担当者へ是正依頼を通知
 function confirmReport(){
   if(!madeRegistered){
+    const repId = "r"+Date.now()+Math.floor(Math.random()*1000);
     if(lastNg.length){
       const dl = new Date(lastMeta.date); dl.setDate(dl.getDate()+7);
       lastNg.forEach(x=>ledger.push({
         id: "z"+Date.now()+Math.floor(Math.random()*1000),
+        repId: repId,
         site:lastMeta.site, ptype:lastMeta.ptype, date:lastMeta.date, inspector:lastMeta.inspector,
         tanto:lastMeta.tanto, tantoMail:lastMeta.tantoMail,
         item:x.item, comment:x.comment, photos:x.photos, cat:x.cat,
@@ -737,11 +766,12 @@ function confirmReport(){
       lsSet("anpat_ledger", ledger);
       updateBadge();
     }
-    // 集計用に確定済み報告書を蓄積
+    // 確定済み報告書を蓄積（正式報告書の再出力用に全チェック結果も保存）
     const reports = lsGet("anpat_reports", []);
-    reports.push({id:"r"+Date.now()+Math.floor(Math.random()*1000),
+    reports.push({id:repId,
       date:lastMeta.date, site:lastMeta.site, ptype:lastMeta.ptype,
-      inspector:lastMeta.inspector, tanto:lastMeta.tanto, ng:lastNg.length, total:totalItems()});
+      inspector:lastMeta.inspector, tanto:lastMeta.tanto, ng:lastNg.length, total:totalItems(),
+      items:lastAll, good:lastMeta.good});
     lsSet("anpat_reports", reports);
     saveTanto();
     // アプリ内通知：担当者へ是正依頼（報告書添付）、上司へ安パト報告
@@ -778,6 +808,7 @@ function makeReport(){
   const done = Object.keys(state).filter(k=>state[k].level).length;
   let ng=[], warn=[];
   lastPhotos = [];
+  lastAll = [];
   for(const k of Object.keys(state)){
     const s = state[k];
     if(!s.level) continue;
@@ -786,6 +817,7 @@ function makeReport(){
     photos.forEach((p,i)=>lastPhotos.push({data:p, caption:itemText(k)+"（写真"+(i+1)+"）"}));
     const grp = k.split("_")[0];
     const cat = grp==="c" ? "共通" : grp==="m" ? "工種別" : "月間重点";
+    lastAll.push({t:itemText(k), l:s.level, c:cat, cm:c}); // 正式報告書用の全チェック結果
     if(s.level==="ng") ng.push({item:itemText(k), comment:c, photos, cat, t:"・"+itemText(k)+(c?("\n　→ "+c):"")+(photos.length?("（写真"+photos.length+"枚）"):"")});
     if(s.level==="warn") warn.push({t:"・"+itemText(k)+(c?("\n　→ "+c):""), photos});
   }
@@ -802,7 +834,7 @@ function makeReport(){
   rep += "【良好・評価事項】\n" + (d("good")||"　（記載なし）") + "\n\n";
   if(ng.length) rep += "※要是正項目は確定時にアプリの「是正管理」へ登録されます。原則1週間以内（重大指摘は即時）に是正し、被点検者はアプリから是正報告してください。\n";
   lastText = rep;
-  lastMeta = {site:d("site"), ptype:d("ptype"), inspector:d("inspector")||"（未記入）", tanto:d("tanto")||"（未記入）", tantoMail:d("tantoMail")||"", date:today};
+  lastMeta = {site:d("site"), ptype:d("ptype"), inspector:d("inspector")||"（未記入）", tanto:d("tanto")||"（未記入）", tantoMail:d("tantoMail")||"", date:today, good:d("good")||""};
   lastNg = ng;
 
   // プレビューモードで表示（この時点では台帳登録しない）
@@ -1008,6 +1040,83 @@ function markRead(id){
   syncNow(false);
 }
 
+// ===== 正式報告書（社外提出用）の出力 =====
+function printOfficialReport(){
+  const repId = (document.getElementById("repSel")||{}).value;
+  const rep = lsGet("anpat_reports", []).find(r=>r.id===repId);
+  if(!rep){ alert("出力する報告書を選択してください（報告書の確定後に出力できます）。"); return; }
+  const esc = s=>String(s==null?"":s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/\n/g,"<br>");
+  const LVL = {ok:"良好", warn:"要注意", ng:"要是正", na:"対象外"};
+  const LVLC = {ok:"#2e7d32", warn:"#ef6c00", ng:"#c62828", na:"#78909c"};
+  // チェック項目一覧表
+  let itemsHtml = "";
+  if(rep.items && rep.items.length){
+    itemsHtml = `<table><tr><th style="width:14%">区分</th><th>点検項目</th><th style="width:12%">評価</th></tr>`
+      + rep.items.map(x=>`<tr><td>${esc(x.c)}</td><td>${esc(x.t)}${x.cm?`<div class="sub">→ ${esc(x.cm)}</div>`:""}</td><td style="color:${LVLC[x.l]||"#333"};font-weight:bold;text-align:center;">${LVL[x.l]||""}</td></tr>`).join("")
+      + `</table>`;
+  } else {
+    itemsHtml = `<p class="sub">（この報告書は旧バージョンで確定されたため、チェック項目一覧の記録がありません）</p>`;
+  }
+  // 指摘・是正・完了の状況（報告書IDで紐付け。旧データは現場＋日付で照合）
+  const findings = ledger.filter(z=>z.repId===rep.id || (!z.repId && z.site===rep.site && z.date===rep.date));
+  let fHtml = "";
+  if(findings.length){
+    fHtml = findings.map((z,i)=>{
+      let b = `<div class="fx"><b>指摘 ${i+1}：${esc(z.item)}</b>`;
+      if(z.comment) b += `<div>指摘内容：${esc(z.comment)}</div>`;
+      b += `<div class="sub">是正期限：${esc(z.deadline)}　状態：${esc(z.status)}</div>`;
+      (z.photos||[]).forEach(p=>b += `<img src="${p}">`);
+      if(z.fix){
+        b += `<div style="margin-top:6px;"><b>是正報告（${esc(z.fix.date)}）</b>${z.fix.comment?`：${esc(z.fix.comment)}`:""}</div>`;
+        (z.fix.photos||[]).forEach(p=>b += `<img src="${p}">`);
+      }
+      if(z.approved) b += `<div><b>是正完了確認：${esc(z.approved.date)}（承認済）</b></div>`;
+      return b + `</div>`;
+    }).join("");
+  } else {
+    fHtml = `<p>要是正の指摘事項はありませんでした。</p>`;
+  }
+  const html = `<!DOCTYPE html><html lang="ja"><head><meta charset="UTF-8"><title>安全パトロール報告書 ${esc(rep.site)}</title>
+<style>
+body{font-family:"Yu Mincho","Hiragino Mincho ProN",serif;max-width:760px;margin:0 auto;padding:24px;font-size:13px;line-height:1.8;color:#111;}
+h1{font-size:22px;text-align:center;letter-spacing:8px;margin:8px 0 4px;}
+.co{text-align:right;font-size:13px;margin-bottom:4px;}
+h2{font-size:15px;border-left:5px solid #1f3864;padding-left:8px;margin:22px 0 8px;font-family:"Yu Gothic",sans-serif;}
+table{border-collapse:collapse;width:100%;font-family:"Yu Gothic",sans-serif;font-size:12px;}
+th,td{border:1px solid #333;padding:5px 8px;vertical-align:top;}
+th{background:#eef2f8;font-weight:bold;text-align:left;}
+.sub{font-size:11px;color:#555;}
+.fx{border:1px solid #999;border-radius:4px;padding:10px;margin:8px 0;page-break-inside:avoid;font-family:"Yu Gothic",sans-serif;}
+img{max-width:46%;margin:4px;border:1px solid #ccc;}
+.sign td{height:70px;width:25%;text-align:center;vertical-align:bottom;font-size:11px;}
+.foot{font-size:10px;color:#777;text-align:right;margin-top:16px;}
+@media print{ body{padding:0;} }
+</style></head><body>
+<div class="co">株式会社中西組</div>
+<h1>安全パトロール報告書</h1>
+<h2>1．実施概要</h2>
+<table>
+<tr><th style="width:22%">工事名</th><td colspan="3">${esc(rep.site)}</td></tr>
+<tr><th>パトロール種別</th><td>${esc(rep.ptype)}</td><th style="width:18%">実施日</th><td>${esc(rep.date)}</td></tr>
+<tr><th>点検者</th><td>${esc(rep.inspector)}</td><th>現場担当者</th><td>${esc(rep.tanto)}</td></tr>
+<tr><th>点検結果</th><td colspan="3">点検 ${rep.items? rep.items.length : rep.total} 項目中、要是正 ${rep.ng} 件${findings.length && findings.every(z=>z.status==="完了")? "（全件是正完了・承認済）" : ""}</td></tr>
+</table>
+<h2>2．チェック項目別 点検結果</h2>
+${itemsHtml}
+<h2>3．指摘事項および是正・完了の状況</h2>
+${fHtml}
+<h2>4．良好・評価事項</h2>
+<p>${esc(rep.good || "（記載なし）")}</p>
+<h2>5．確認欄</h2>
+<table class="sign"><tr><th style="text-align:center;">点検者</th><th style="text-align:center;">現場代理人</th><th style="text-align:center;">安全担当者</th><th style="text-align:center;">所属長</th></tr>
+<tr><td></td><td></td><td></td><td></td></tr></table>
+<div class="foot">㈱中西組 安全パトロールアプリ出力（出力日：${new Date().toISOString().slice(0,10)}）</div>
+<script>setTimeout(function(){window.print();},600);<\/script></body></html>`;
+  const w = window.open("", "_blank");
+  if(!w){ alert("ポップアップがブロックされました。ブラウザの設定でこのサイトのポップアップを許可してください。"); return; }
+  w.document.write(html); w.document.close();
+}
+
 // ===== 集計・傾向分析 =====
 // 指摘の区分（共通／工種別／月間重点）。旧データは項目名からマスタ照合で判定
 function itemCat(z){
@@ -1070,6 +1179,18 @@ function renderBunseki(){
   document.getElementById("bn_months").innerHTML = months.length?
     months.map(k=>bnBar(k+"　パトロール", mAll[k].p, maxM, "var(--blue)") + bnBar(k+"　指摘", mAll[k].n, maxM, "var(--ng)")).join("")
     : '<div class="note">まだデータがありません。</div>';
+  // アーカイブ（完了・承認済）
+  const archEsc = s=>String(s==null?"":s).replace(/&/g,"&amp;").replace(/</g,"&lt;");
+  const arch = done.slice().sort((a,b)=>String(b.approved?b.approved.date:"").localeCompare(String(a.approved?a.approved.date:"")));
+  document.getElementById("bn_arch_title").textContent = "アーカイブ（完了・承認済の是正案件　全"+arch.length+"件）";
+  document.getElementById("bn_archive").innerHTML = arch.length?
+    arch.slice(0,100).map(z=>`<div class="zcard">
+      <span class="chip s-done">完了</span>
+      <div style="font-weight:bold; margin-top:4px; line-height:1.5;">${archEsc(z.item)}</div>
+      <div class="zmeta">${archEsc(z.site)}｜${archEsc(z.ptype)}</div>
+      <div class="zmeta">指摘日 ${archEsc(z.date)}｜是正報告 ${archEsc(z.fix?z.fix.date:"")}｜承認 ${archEsc(z.approved?z.approved.date:"")}｜担当 ${archEsc(z.tanto||"")}</div>
+    </div>`).join("")
+    : '<div class="note">完了した案件はまだありません。</div>';
 }
 
 function backToInput(){
@@ -1105,6 +1226,19 @@ function updateBadge(){
 }
 
 let zPhotoTemp = {};
+function renderZPhotos(id){
+  const box = document.getElementById("zp_"+id);
+  if(!box) return;
+  const ps = zPhotoTemp[id] || [];
+  box.innerHTML = ps.map((p,i)=>
+    `<span class="pwrap"><img src="${p}" class="thumb"><button class="pdel" onclick="delZPhoto('${id}',${i})">✕</button></span>`
+  ).join("");
+}
+function delZPhoto(id, i){
+  if(!zPhotoTemp[id]) return;
+  zPhotoTemp[id].splice(i, 1);
+  renderZPhotos(id);
+}
 function addZPhoto(id, input){
   const files = Array.from(input.files || []);
   input.value = "";
@@ -1119,8 +1253,7 @@ function addZPhoto(id, input){
         cv.getContext("2d").drawImage(im,0,0,cv.width,cv.height);
         const data=cv.toDataURL("image/jpeg",0.8);
         (zPhotoTemp[id]=zPhotoTemp[id]||[]).push(data);
-        const img=document.createElement("img"); img.src=data; img.className="thumb";
-        document.getElementById("zp_"+id).appendChild(img);
+        renderZPhotos(id);
       };
       im.src=e.target.result;
     };
@@ -1132,11 +1265,20 @@ function photoRow(ps){ return (ps&&ps.length)? "<div>"+ps.map(p=>`<img src="${p}
 
 function renderZesei(){
   updateBadge();
+  // 正式報告書の選択肢（確定済み報告書・新しい順）
+  const repSel = document.getElementById("repSel");
+  if(repSel){
+    const reps = lsGet("anpat_reports", []).filter(r=>!r.kind).slice().reverse();
+    repSel.innerHTML = reps.length
+      ? reps.map(r=>`<option value="${r.id}">${r.date}　${r.site}（${r.ptype}）</option>`).join("")
+      : '<option value="">（確定済みの報告書がまだありません）</option>';
+  }
   const role = document.getElementById("role").value;
   const wrap = document.getElementById("zlist");
-  if(!ledger.length){ wrap.innerHTML='<div class="note">是正案件はありません。「点検入力」で要是正を登録するとここに表示されます。</div>'; return; }
+  const active = ledger.filter(z=>z.status!=="完了"); // 完了分は集計タブのアーカイブへ
+  if(!active.length){ wrap.innerHTML='<div class="note">未完了の是正案件はありません。完了した案件は「集計」タブのアーカイブで確認できます。</div>'; return; }
   const todayS = new Date().toISOString().slice(0,10);
-  wrap.innerHTML = ledger.slice().reverse().map(z=>{
+  wrap.innerHTML = active.slice().reverse().map(z=>{
     const chip = z.status==="未是正" ? '<span class="chip s-open">未是正</span>'
       : z.status==="是正報告済" ? '<span class="chip s-fixed">是正報告済（承認待ち）</span>'
       : '<span class="chip s-done">完了・報告済</span>';
