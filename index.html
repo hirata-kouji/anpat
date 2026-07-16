@@ -85,7 +85,7 @@
 <header>
   <h1>㈱中西組 安全パトロールアプリ</h1>
   <div class="sub" style="display:flex; justify-content:space-between; align-items:center;">
-    <span>点検 → 是正報告 → 承認 → 上司へ報告完了まで一気通貫</span>
+    <span id="syncbar" onclick="syncNow(true)" style="cursor:pointer; font-size:11px; opacity:.92;">同期：確認中…</span>
     <button onclick="openHelp()" style="background:rgba(255,255,255,.2); color:#fff; border:none; border-radius:12px; padding:3px 12px; font-size:12px; font-weight:bold; white-space:nowrap;">❓ 使い方</button>
   </div>
   <nav class="tabs">
@@ -222,10 +222,7 @@
       <button class="a-back" onclick="printLedgerReport()">是正一覧出力（PDF）</button>
       <button class="a-back" onclick="exportLedgerCSV()">Excel出力（CSV）</button>
     </div>
-    <div class="actions">
-      <button class="a-back" onclick="syncNow(true)">今すぐ同期</button>
-    </div>
-    <div class="note" id="syncStatus">同期：未設定（この端末のみに保存）。設定タブで同期URLを登録すると全員のスマホと自動同期されます。</div>
+    <div class="note" id="syncStatus">同期は自動で行われます（1分ごと・アプリを開いた時・各操作時）。状況は画面上部に常時表示され、タップすると手動同期できます。</div>
   </div>
 </div>
 
@@ -238,7 +235,7 @@
       <option value="all">すべて</option>
     </select>
     <div id="nlist" style="margin-top:12px;"></div>
-    <div class="note">※通知は同期のタイミング（アプリ起動時・タブ切替時・各操作時）で届きます。宛先の照合には設定タブ「自分の情報」の氏名・役職を使用します。</div>
+    <div class="note">※通知は自動同期（1分ごと・アプリ起動時・各操作時）で届きます。宛先の照合には設定タブ「自分の情報」の氏名・役職を使用します。</div>
   </div>
 </div>
 
@@ -357,7 +354,7 @@
       <div style="padding:4px 0 8px;">
       ① 「設定」タブ →「自分の情報」に<b>氏名</b>を入力して保存（通知の宛先になります。上司の方は役職も）<br>
       ② 「設定」タブ →「自動同期設定」に会社から案内された<b>同期URL</b>を貼り付けて保存<br>
-      ③ 是正管理タブの「今すぐ同期」で「同期：完了」になれば準備OK
+      ③ 画面上部の同期表示が「同期：完了」になれば準備OK（以後は1分ごとに自動同期）
       </div>
     </details>
 
@@ -369,7 +366,7 @@
       ④ 要注意・要是正は内容を記入し「📷撮影」or「🖼️フォルダから選択」で写真添付（✕で削除可）<br>
       ⑤ チェックリストに無い気づきは一番下の「チェック項目外の指摘・注意事項」へ<br>
       ⑥ 「プレビュー」→内容確認→「この内容で確定」<br>
-      ⑦ 確定すると：要是正が是正管理に登録され、<b>担当者へ是正依頼・上司へ安パト報告が自動通知</b>されます（メール送信は任意）
+      ⑦ 確定すると：要是正が是正管理に登録され、<b>担当者へ是正依頼・上司へ安パト報告が自動通知</b>されます
       </div>
     </details>
 
@@ -413,7 +410,7 @@
 
     <details><summary style="font-weight:bold; color:var(--navy); padding:8px 0; cursor:pointer;">🆘 困ったとき</summary>
       <div style="padding:4px 0 8px;">
-      <b>同期に失敗する：</b>電波状況を確認→設定タブの同期URLが正しいか（末尾が /exec）→「今すぐ同期」で再試行<br>
+      <b>同期に失敗する：</b>電波状況を確認→設定タブの同期URLが正しいか（末尾が /exec）を確認。同期は1分ごとに自動で行われ、画面上部の「同期：…」表示をタップすると手動でも同期できます<br>
       <b>「未送信の是正データがあります」と出た：</b>圏外などでサーバーに送れなかった状態です。データは消えません。電波の届く場所に戻ると自動で再送されます（バナーの「今すぐ再送」でも送信可）。是正データはサーバー保管のため、<b>再送が終わるまでアプリを消さない</b>でください<br>
       <b>通知が届かない：</b>設定タブ「自分の情報」の氏名が、点検入力で書かれた名前（点検者名・現場担当者名）と一致しているか確認<br>
       <b>アプリの更新が反映されない：</b>アプリを一度完全に閉じて開き直す<br>
@@ -1001,9 +998,7 @@ function confirmReport(){
   document.getElementById("finalActions").style.display = "block";
   window.scrollTo(0,0);
   if(lastNg.length){
-    if(confirm("確定しました。要是正 "+lastNg.length+" 件を「是正管理」に登録し、担当者（"+(lastMeta.tanto||"未記入")+"）と上司へアプリ内通知を送りました。\nメールでも是正依頼を送りますか？")){
-      sendTantoMail();
-    }
+    alert("確定しました。要是正 "+lastNg.length+" 件を「是正管理」に登録し、担当者（"+(lastMeta.tanto||"未記入")+"）と上司へアプリ内通知を送りました。");
   } else {
     alert("確定しました（要是正はありません）。上司へ安パト報告の通知を送りました。");
   }
@@ -1736,11 +1731,7 @@ function approveFixRep(gi){
       items.length+"件の是正を確認し、承認しました（承認日 "+d+"）。ありがとうございました。", z0.repId||z0.id);
   }
   syncNow(false);
-  if(confirm("承認しました（"+items.length+"件まとめて）。" + rtRoles.join("・") + " と担当者へアプリ内通知を送りました。\nメールでも完了報告を送りますか？")){
-    location.href = "mailto:" + encodeURIComponent(rt.mail||"")
-      + "?subject=" + encodeURIComponent("【安パト是正完了】" + z0.site + "（"+items.length+"件）")
-      + "&body=" + encodeURIComponent(body);
-  }
+  alert("承認しました（"+items.length+"件まとめて）。" + rtRoles.join("・") + " と担当者へアプリ内通知を送りました。");
 }
 
 // ===== 自動同期（Google Apps Script 同期サーバ） =====
@@ -1757,8 +1748,10 @@ function saveSyncUrl(){
   if(u) syncNow(true);
 }
 function setSyncStatus(t){
-  const el = document.getElementById("syncStatus"); if(el) el.textContent = t;
   const b = document.getElementById("bn_sync"); if(b) b.textContent = t.replace(/^同期：/, "サーバー連動：");
+  // ヘッダー（タブバーの外側）に常時表示する短縮版
+  const sb = document.getElementById("syncbar");
+  if(sb) sb.textContent = t.replace(/。[\s\S]*$/, "").replace(/　.*$/, "");
 }
 let syncing = false;
 function syncNow(showResult){
@@ -1794,7 +1787,16 @@ function syncNow(showResult){
       pendingLedger.forEach(p=>{ const i2 = ledger.findIndex(x=>x.id===p.id); if(i2>=0) ledger[i2]=p; else ledger.push(p); });
       if(!pendingLedger.length) offlineWarned = false;
       updateOfflineBanner();
-      if(d && d.reports){ lsSet("anpat_reports", d.reports); }
+      if(d && d.reports){
+        // 既読情報（read）は端末間で合算：他端末の古いコピーで既読が未読に戻るのを防ぐ
+        const lmap = {};
+        lsGet("anpat_reports", []).forEach(r=>{ if(r && r.id) lmap[r.id] = r; });
+        d.reports.forEach(r=>{
+          const l = lmap[r.id];
+          if(l && (l.read || r.read)) r.read = Object.assign({}, r.read||{}, l.read||{});
+        });
+        lsSet("anpat_reports", d.reports);
+      }
       // 管理者が配信したマスタ・報告先を受信（点検入力中の端末は次回同期時に反映）
       const inProgress = Object.keys(state).some(k=>state[k] && state[k].level);
       if(d && d.masters && (d.mver||0) > lsGet("anpat_mver",0) && !inProgress){
@@ -2064,6 +2066,8 @@ updateNotifBadge();
 updateOfflineBanner(); // 前回の未送信分があればバナー表示
 syncNow(false); // 起動時に自動同期（是正台帳はサーバーから取得）
 window.addEventListener("online", ()=>syncNow(false)); // 電波復帰で自動再送
+setInterval(()=>syncNow(false), 60000); // 1分ごとに自動同期
+document.addEventListener("visibilitychange", ()=>{ if(!document.hidden) syncNow(false); }); // アプリ復帰時に自動同期
 
 // PWA：https配信時のみオフライン用サービスワーカーを登録（単体ファイル利用時は無害に無視）
 if("serviceWorker" in navigator && location.protocol==="https:"){
