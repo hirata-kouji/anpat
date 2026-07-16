@@ -1865,19 +1865,22 @@ function collectMastersFromUI(){
   });
 }
 function saveMasters(){
+  collectRoutesUI(); // 表示中の報告先設定の選択も先に退避（連動保存）
   collectMastersFromUI();
   if(!masters.sites.length) masters.sites = ["（工事名未設定）"];
   if(!masters.ptypes.length) masters.ptypes = ["店社パトロール"];
   if(!masters.roles.length) masters.roles = JSON.parse(JSON.stringify(DEFAULT_MASTERS.roles));
   if(!masters.common.length) masters.common = ["（共通項目未設定）"];
   lsSet("anpat_masters", masters);
+  lsSet("anpat_routes", routes); // 報告先設定もまとめて保存（ワンボタン化）
   refreshSelects(); render(); renderRoutes();
+  applyAdminLock();
   if(lsGet("anpat_adminkey","")){
     lsSet("anpat_mver", Date.now());
     syncNow(false);
-    alert("マスタを保存しました。同期により全端末に配信されます。");
+    alert("マスタと報告先設定を保存しました。同期により全端末に配信されます。");
   } else {
-    alert("マスタを保存しました（この端末のみ）。");
+    alert("マスタと報告先設定を保存しました（この端末のみ）。");
   }
 }
 function addModule(){
