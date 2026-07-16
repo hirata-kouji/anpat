@@ -310,6 +310,11 @@
     <input type="text" id="adminKey" placeholder="一般の方は空欄のまま">
     <div class="actions"><button class="a-copy" onclick="saveSyncUrl()">同期設定を保存</button></div>
   </div>
+  <div class="card">
+    <h2>データの初期化（テスト運用終了時）</h2>
+    <div class="note" style="margin-bottom:6px;">この端末に保存されている報告書・是正案件・通知をすべて削除します（工事名などのマスタ、自分の情報、同期設定、担当者の記憶は残ります）。<b>同期サーバ側のデータ削除は管理者が別途行ってください</b>。サーバに残っていると、次の同期で戻ります。</div>
+    <div class="actions"><button style="flex:1;background:var(--ng);color:#fff;border:none;border-radius:8px;padding:12px 0;font-size:14px;font-weight:bold;" onclick="clearAllData()">この端末のテストデータを削除</button></div>
+  </div>
 </div>
 </main>
 
@@ -1705,6 +1710,21 @@ function resetMasters(){
   lsSet("anpat_masters", masters);
   renderConfig(); refreshSelects(); render();
   alert("初期値に戻しました");
+}
+
+// テストデータの初期化（この端末の報告書・是正案件・通知を削除）
+function clearAllData(){
+  if(!confirm("この端末に保存されている『報告書・是正案件・通知』をすべて削除します。よろしいですか？\n（マスタ・自分の情報・同期設定は残ります）")) return;
+  if(!confirm("削除すると元に戻せません。本当に削除しますか？")) return;
+  ledger = [];
+  lsSet("anpat_ledger", []);
+  lsSet("anpat_reports", []);
+  updateBadge();
+  updateNotifBadge();
+  if(document.getElementById("page-zesei").style.display==="block") renderZesei();
+  if(document.getElementById("page-notif").style.display==="block") renderNotif();
+  if(document.getElementById("page-bunseki").style.display==="block") renderBunseki();
+  alert("この端末のデータを削除しました。\n※同期サーバ側の削除がまだの場合、次の同期でデータが戻ることがあります（管理者にご確認ください）。");
 }
 
 // 操作方法ヘルプの表示・非表示
