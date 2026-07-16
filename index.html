@@ -311,9 +311,10 @@
     <div class="actions"><button class="a-copy" onclick="saveSyncUrl()">同期設定を保存</button></div>
   </div>
   <div class="card">
-    <h2>データの初期化（テスト運用終了時）</h2>
-    <div class="note" style="margin-bottom:6px;">この端末に保存されている報告書・是正案件・通知をすべて削除します（工事名などのマスタ、自分の情報、同期設定、担当者の記憶は残ります）。<b>同期サーバ側のデータ削除は管理者が別途行ってください</b>。サーバに残っていると、次の同期で戻ります。</div>
-    <div class="actions"><button style="flex:1;background:var(--ng);color:#fff;border:none;border-radius:8px;padding:12px 0;font-size:14px;font-weight:bold;" onclick="clearAllData()">この端末のテストデータを削除</button></div>
+    <h2>データの初期化</h2>
+    <div class="note" style="margin-bottom:6px;">報告書・是正案件・通知のデータを削除します（工事名などのマスタ、報告先設定、自分の情報、同期設定は残ります）。<br><b>管理者用ボタン</b>は、サーバのデータを削除したうえで全端末にも反映され、削除済みの古いデータが同期で戻ることもありません。年度替わり等の初期化にも使えます（実行前にExcel・PDFでの保管をおすすめします）。</div>
+    <div class="actions"><button style="flex:1;background:#7b1fa2;color:#fff;border:none;border-radius:8px;padding:12px 0;font-size:14px;font-weight:bold;" onclick="adminPurge()">サーバと全端末のデータを削除（管理者）</button></div>
+    <div class="actions"><button style="flex:1;background:var(--ng);color:#fff;border:none;border-radius:8px;padding:12px 0;font-size:14px;font-weight:bold;" onclick="clearAllData()">この端末のデータのみ削除</button></div>
   </div>
 </div>
 </main>
@@ -1725,6 +1726,32 @@ function clearAllData(){
   if(document.getElementById("page-notif").style.display==="block") renderNotif();
   if(document.getElementById("page-bunseki").style.display==="block") renderBunseki();
   alert("この端末のデータを削除しました。\n※同期サーバ側の削除がまだの場合、次の同期でデータが戻ることがあります（管理者にご確認ください）。");
+}
+
+// 管理者：サーバと全端末のデータを削除（マスタ・報告先は維持）
+function adminPurge(){
+  const key = lsGet("anpat_adminkey","");
+  const url = getSyncUrl();
+  if(!key){ alert("管理者キーが設定されていません。「自動同期設定」で管理者キーを入力してください。"); return; }
+  if(!url){ alert("同期URLが未設定です。"); return; }
+  if(!confirm("サーバに保存されている全データ（報告書・是正案件・通知）を削除します。全端末に反映されます。よろしいですか？\n（マスタ・報告先設定は残ります）")) return;
+  if(!confirm("削除すると元に戻せません。本当に実行しますか？")) return;
+  fetch(url, {method:"POST", body:JSON.stringify({key:key, purge:1}), redirect:"follow"})
+    .then(r=>r.json())
+    .then(d=>{
+      if(d && d.purged){
+        ledger = [];
+        lsSet("anpat_ledger", []);
+        lsSet("anpat_reports", []);
+        if(d.purgeTs) lsSet("anpat_purgets", d.purgeTs);
+        updateBadge(); updateNotifBadge();
+        if(document.getElementById("page-zesei").style.display==="block") renderZesei();
+        alert("サーバと この端末のデータを削除しました。他の端末には次回同期時に自動反映されます。");
+      } else {
+        alert("削除できませんでした" + (d && d.error ? "：" + d.error : "。管理者キーが正しいか、サーバが最新版か確認してください。"));
+      }
+    })
+    .catch(()=>alert("通信エラーで削除できませんでした。電波状況を確認してください。"));
 }
 
 // 操作方法ヘルプの表示・非表示
