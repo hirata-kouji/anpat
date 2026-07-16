@@ -121,7 +121,8 @@
   <div class="card">
     <h2>基本情報</h2>
     <label>工事名　<span style="color:#999">（設定タブで追加・変更できます）</span></label>
-    <select id="site" onchange="fillTanto()"></select>
+    <select id="site" onchange="onSiteChange()"></select>
+    <input type="text" id="siteOther" placeholder="工事名を入力してください" style="display:none; margin-top:6px;">
     <label>パトロール種別</label>
     <select id="ptype"></select>
     <label>工種（重点モジュール）</label>
@@ -143,6 +144,26 @@
   <div class="card">
     <h2>良好・評価事項（褒める安パト）</h2>
     <textarea id="good" placeholder="良かった点を記入（月次で全現場に横展開されます）"></textarea>
+  </div>
+
+  <div class="card">
+    <h2>チェック項目外の指摘・注意事項（自由記入）</h2>
+    <div class="note" style="margin-bottom:6px;">チェックリストに無い気づき・指摘があれば記入してください。「要是正」を選ぶと是正管理に登録され、担当者へ是正依頼が届きます。</div>
+    <label>区分</label>
+    <select id="freeLevel">
+      <option value="">記載なし</option>
+      <option value="warn">要注意（口頭指導・記録のみ）</option>
+      <option value="ng">要是正（是正管理に登録）</option>
+    </select>
+    <label>内容</label>
+    <textarea id="freeText" placeholder="例）隣接民地側のフェンス基礎が露出しており、通行人が接触するおそれ"></textarea>
+    <label class="photo-btn">📷 撮影
+      <input type="file" accept="image/*" capture="environment" style="display:none" onchange="addFreePhoto(this)">
+    </label>
+    <label class="photo-btn">🖼️ フォルダから選択（複数可）
+      <input type="file" accept="image/*" multiple style="display:none" onchange="addFreePhoto(this)">
+    </label>
+    <div id="p_free"></div>
   </div>
 </div>
 
@@ -630,6 +651,11 @@ function render(){
     masters.monthly.map((t,i)=>itemHTML("g",i,t)).join("");
   state = {};
   madeRegistered = false;
+  // 自由記入欄もリセット
+  freePhotos = [];
+  const fT = document.getElementById("freeText"); if(fT) fT.value = "";
+  const fL = document.getElementById("freeLevel"); if(fL) fL.value = "";
+  renderFreePhotos();
   updateProgress();
 }
 
@@ -714,6 +740,56 @@ function itemText(key){
 }
 
 let lastText = "", lastPhotos = [], lastMeta = {}, lastNg = [], lastAll = [];
+
+// 工事名「その他」選択時は自由入力欄を表示
+function onSiteChange(){
+  const other = document.getElementById("siteOther");
+  other.style.display = (document.getElementById("site").value === "その他") ? "block" : "none";
+  fillTanto();
+}
+// 実際に報告書へ記載する工事名（その他のときは自由入力を採用）
+function siteName(){
+  const v = document.getElementById("site").value;
+  if(v === "その他"){
+    const t = document.getElementById("siteOther").value.trim();
+    return t || "その他";
+  }
+  return v;
+}
+
+// ===== チェック項目外の自由記入（写真付き） =====
+let freePhotos = [];
+function renderFreePhotos(){
+  const box = document.getElementById("p_free");
+  if(!box) return;
+  box.innerHTML = freePhotos.map((p,i)=>
+    `<span class="pwrap"><img src="${p}" class="thumb"><button class="pdel" onclick="delFreePhoto(${i})">✕</button></span>`
+  ).join("");
+}
+function delFreePhoto(i){
+  freePhotos.splice(i, 1);
+  renderFreePhotos();
+}
+function addFreePhoto(input){
+  const files = Array.from(input.files || []);
+  input.value = "";
+  files.forEach(f=>{
+    const r = new FileReader();
+    r.onload = e=>{
+      const im = new Image();
+      im.onload = ()=>{
+        const MAX=1280, sc=Math.min(1,MAX/Math.max(im.width,im.height));
+        const cv=document.createElement("canvas");
+        cv.width=Math.round(im.width*sc); cv.height=Math.round(im.height*sc);
+        cv.getContext("2d").drawImage(im,0,0,cv.width,cv.height);
+        freePhotos.push(cv.toDataURL("image/jpeg",0.8));
+        renderFreePhotos();
+      };
+      im.src=e.target.result;
+    };
+    r.readAsDataURL(f);
+  });
+}
 
 // 担当者の記憶（工事名ごとに保存・自動入力）
 function fillTanto(){
@@ -821,9 +897,21 @@ function makeReport(){
     if(s.level==="ng") ng.push({item:itemText(k), comment:c, photos, cat, t:"・"+itemText(k)+(c?("\n　→ "+c):"")+(photos.length?("（写真"+photos.length+"枚）"):"")});
     if(s.level==="warn") warn.push({t:"・"+itemText(k)+(c?("\n　→ "+c):""), photos});
   }
+  // チェック項目外の自由記入を取り込み
+  const freeLv = d("freeLevel");
+  const freeTx = (d("freeText")||"").trim();
+  if(freeLv && (freeTx || freePhotos.length)){
+    const fTitle = "（チェック項目外）" + (freeTx ? freeTx.split("\n")[0].slice(0,30) : "写真による指摘");
+    freePhotos.forEach((p,i)=>lastPhotos.push({data:p, caption:"チェック項目外（写真"+(i+1)+"）"}));
+    lastAll.push({t:"（チェック項目外）"+(freeTx||"写真による指摘"), l:freeLv, c:"項目外", cm:""});
+    const fT = "・（チェック項目外）"+(freeTx||"")+(freePhotos.length?("（写真"+freePhotos.length+"枚）"):"");
+    if(freeLv==="ng") ng.push({item:fTitle, comment:freeTx, photos:freePhotos.slice(), cat:"項目外", t:fT});
+    else warn.push({t:fT, photos:freePhotos.slice()});
+  }
+  const siteVal = siteName();
   let rep = "";
   rep += "＝＝ 安全パトロール実施報告 ＝＝\n";
-  rep += "工事名　　：" + d("site") + "\n";
+  rep += "工事名　　：" + siteVal + "\n";
   rep += "種別　　　：" + d("ptype") + "\n";
   rep += "点検日　　：" + today + "\n";
   rep += "点検者　　：" + (d("inspector")||"（未記入）") + "\n";
@@ -834,7 +922,7 @@ function makeReport(){
   rep += "【良好・評価事項】\n" + (d("good")||"　（記載なし）") + "\n\n";
   if(ng.length) rep += "※要是正項目は確定時にアプリの「是正管理」へ登録されます。原則1週間以内（重大指摘は即時）に是正し、被点検者はアプリから是正報告してください。\n";
   lastText = rep;
-  lastMeta = {site:d("site"), ptype:d("ptype"), inspector:d("inspector")||"（未記入）", tanto:d("tanto")||"（未記入）", tantoMail:d("tantoMail")||"", date:today, good:d("good")||""};
+  lastMeta = {site:siteVal, ptype:d("ptype"), inspector:d("inspector")||"（未記入）", tanto:d("tanto")||"（未記入）", tantoMail:d("tantoMail")||"", date:today, good:d("good")||""};
   lastNg = ng;
 
   // プレビューモードで表示（この時点では台帳登録しない）
@@ -858,7 +946,7 @@ function makeReport(){
     rb.appendChild(ph);
   }
   document.getElementById("maillink").href =
-    "mailto:?subject=" + encodeURIComponent("【安パト報告】"+d("site")+" "+today) +
+    "mailto:?subject=" + encodeURIComponent("【安パト報告】"+siteVal+" "+today) +
     "&body=" + encodeURIComponent(rep);
   // 共有APIが使えない環境では共有ボタンを隠す
   document.getElementById("sharebtn").style.display = (navigator.share && navigator.canShare) ? "" : "none";
