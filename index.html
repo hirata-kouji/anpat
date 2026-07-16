@@ -320,8 +320,16 @@
     <h2>自分の情報（通知の宛先照合用）</h2>
     <label>氏名（点検者名・現場担当者名と同じ表記にしてください）</label>
     <input type="text" id="me_name" placeholder="例）山田太郎">
-    <label>役職（上司として報告を受ける方のみ。報告先設定の役職名と同じ表記に）</label>
-    <input type="text" id="me_yaku" placeholder="例）常務以上／土木部長／安全担当者">
+    <label>役職（上司として報告を受ける方のみ選択。一般の方は「なし」のまま）</label>
+    <select id="me_yaku">
+      <option value="">なし（一般）</option>
+      <option>班長</option>
+      <option>リーダー</option>
+      <option>土木部長</option>
+      <option>常務</option>
+      <option>社長</option>
+      <option>会長</option>
+    </select>
     <label>メールアドレス（任意・メール併用する場合）</label>
     <input type="text" id="me_mail" placeholder="例）yamada@example.co.jp">
     <div class="actions"><button class="a-copy" onclick="saveMe()">自分の情報を保存</button></div>
@@ -962,15 +970,15 @@ function confirmReport(){
       items:lastAll, good:lastMeta.good});
     lsSet("anpat_reports", reports);
     saveTanto();
-    // アプリ内通知：担当者へ是正依頼（報告書添付）、上司へ安パト報告
-    const rtN = routes[lastMeta.ptype]||{yaku:"上司"};
+    // アプリ内通知：担当者へ是正依頼（報告書添付）、上司へ安パト報告（複数役職に対応）
+    const rolesN = routeRoles(routes[lastMeta.ptype]);
     if(lastNg.length && lastMeta.tanto && lastMeta.tanto!=="（未記入）"){
       const dlN = new Date(lastMeta.date); dlN.setDate(dlN.getDate()+7);
       notify({name:lastMeta.tanto}, "是正依頼",
         "【是正依頼】"+lastMeta.site+"（要是正"+lastNg.length+"件・期限 "+dlN.toISOString().slice(0,10)+"）",
         lastText, null);
     }
-    notify({role:rtN.yaku}, "安パト報告",
+    notify({roles: rolesN.length? rolesN : ["上司"]}, "安パト報告",
       "【安パト報告】"+lastMeta.site+" "+lastMeta.date+"（要是正"+lastNg.length+"件）",
       lastText, null);
     madeRegistered = true;
@@ -1189,6 +1197,7 @@ function isMine(n){
   if(!n.to) return false;
   if(n.to.name && me.name && n.to.name===me.name) return true;
   if(n.to.role && me.yaku && n.to.role===me.yaku) return true;
+  if(n.to.roles && me.yaku && n.to.roles.indexOf(me.yaku)>=0) return true; // 複数役職宛て
   return false;
 }
 function updateNotifBadge(){
@@ -1217,7 +1226,7 @@ function renderNotif(){
   const esc = s=>String(s==null?"":s).replace(/&/g,"&amp;").replace(/</g,"&lt;");
   wrap.innerHTML = list.map(n=>{
     const unread = isMine(n) && !(n.read && n.read[key]);
-    const toStr = n.to? (n.to.name? esc(n.to.name)+" さん" : esc(n.to.role)+" 宛") : "";
+    const toStr = n.to? (n.to.name? esc(n.to.name)+" さん" : esc(n.to.roles? n.to.roles.join("・") : (n.to.role||""))+" 宛") : "";
     return `<div class="zcard" style="${unread? "border-color:var(--ng);":""}">
       <span class="chip ${NTYPE_COLOR[n.type]||"s-fixed"}">${esc(n.type)}</span>${unread? ' <span class="deadline-over">未読</span>':""}
       <div style="font-weight:bold; margin-top:6px;">${esc(n.title)}</div>
@@ -1504,15 +1513,27 @@ function lsGet(k, def){ try{ const v=localStorage.getItem(k); return v?JSON.pars
 function lsSet(k, v){ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){} }
 let ledger = lsGet("anpat_ledger", []);
 let madeRegistered = false;
+const ROLES = ["班長","リーダー","土木部長","常務","社長","会長"]; // 役職の選択肢
 const DEFAULT_ROUTES = {
-  "店社パトロール（第1回・全項目）":{yaku:"常務以上", mail:""},
-  "店社パトロール（第2回・重点）":{yaku:"常務以上", mail:""},
-  "監理課パトロール":{yaku:"土木部長", mail:""},
-  "役員パトロール":{yaku:"社長", mail:""},
-  "現場セルフ点検":{yaku:"安全担当者", mail:""},
-  "臨時（台風・豪雨後等）":{yaku:"常務以上", mail:""}
+  "店社パトロール（第1回・全項目）":{yakus:["常務"], mail:""},
+  "店社パトロール（第2回・重点）":{yakus:["常務"], mail:""},
+  "監理課パトロール":{yakus:["土木部長"], mail:""},
+  "役員パトロール":{yakus:["社長"], mail:""},
+  "現場セルフ点検":{yakus:["リーダー"], mail:""},
+  "臨時（台風・豪雨後等）":{yakus:["常務"], mail:""}
 };
 let routes = Object.assign({}, DEFAULT_ROUTES, lsGet("anpat_routes", {}));
+// 報告先役職の取り出し（旧形式 {yaku:"…"} との互換付き）
+function routeRoles(rt){
+  if(!rt) return [];
+  if(Array.isArray(rt.yakus)) return rt.yakus;
+  if(rt.yaku) return [rt.yaku];
+  return [];
+}
+function routeLabel(rt){
+  const r = routeRoles(rt);
+  return r.length ? r.join("・") : "上司";
+}
 
 function updateBadge(){
   const n = ledger.filter(z=>z.status!=="完了").length;
@@ -1600,14 +1621,13 @@ function renderZesei(){
       h += `<div class="note">被点検者の是正報告待ちです。</div>`;
     }
     if(z.status==="是正報告済" && role==="pat"){
-      const rt = routes[z.ptype]||{yaku:"上司",mail:""};
-      h += `<button class="zbtn" style="background:var(--ok);" onclick="approveFix('${z.id}')">承認して ${rt.yaku} へ完了報告</button>`;
+      h += `<button class="zbtn" style="background:var(--ok);" onclick="approveFix('${z.id}')">承認して ${routeLabel(routes[z.ptype])} へ完了報告</button>`;
     }
     if(z.status==="是正報告済" && role==="fix"){
       h += `<div class="note">安パト者の承認待ちです。</div>`;
     }
     if(z.status==="完了"){
-      h += `<div class="zmeta">承認日 ${z.approved?z.approved.date:""}｜報告先 ${(routes[z.ptype]||{}).yaku||"上司"}</div>`;
+      h += `<div class="zmeta">承認日 ${z.approved?z.approved.date:""}｜報告先 ${routeLabel(routes[z.ptype])}</div>`;
     }
     return h+"</div>";
   }).join("");
@@ -1634,9 +1654,10 @@ function approveFix(id){
   const z = ledger.find(x=>x.id===id); if(!z) return;
   z.status = "完了"; z.approved = {date:new Date().toISOString().slice(0,10)};
   lsSet("anpat_ledger", ledger); renderZesei();
-  const rt = routes[z.ptype]||{yaku:"上司", mail:""};
+  const rt = routes[z.ptype]||{yakus:["上司"], mail:""};
+  const rtRoles = routeRoles(rt).length ? routeRoles(rt) : ["上司"];
   const body = "安全パトロール是正完了報告\n\n"
-    + "報告先　：" + rt.yaku + "\n"
+    + "報告先　：" + rtRoles.join("・") + "\n"
     + "工事名　：" + z.site + "\n"
     + "種別　　：" + z.ptype + "\n"
     + "指摘日　：" + z.date + "（点検者 " + z.inspector + "）\n"
@@ -1645,14 +1666,14 @@ function approveFix(id){
     + "是正報告：" + (z.fix? z.fix.date : "") + "　" + (z.fix && z.fix.comment? z.fix.comment : "") + "\n"
     + "承認日　：" + z.approved.date + "\n\n"
     + "※是正前後の写真はアプリの是正管理台帳をご確認ください。";
-  // アプリ内通知：上司へ是正完了報告、担当者へ完了連絡
-  notify({role:rt.yaku}, "是正完了報告", "【是正完了報告】"+z.site, body, z.id);
+  // アプリ内通知：上司（複数役職可）へ是正完了報告、担当者へ完了連絡
+  notify({roles:rtRoles}, "是正完了報告", "【是正完了報告】"+z.site, body, z.id);
   if(z.tanto && z.tanto!=="（未記入）"){
     notify({name:z.tanto}, "是正完了", "【是正完了】"+z.site,
       "指摘事項："+z.item+"\n承認日："+z.approved.date+"\n是正を確認しました。ありがとうございました。", z.id);
   }
   syncNow(false);
-  if(confirm("承認しました。" + rt.yaku + " と担当者へアプリ内通知を送りました。\nメールでも完了報告を送りますか？")){
+  if(confirm("承認しました。" + rtRoles.join("・") + " と担当者へアプリ内通知を送りました。\nメールでも完了報告を送りますか？")){
     location.href = "mailto:" + encodeURIComponent(rt.mail||"")
       + "?subject=" + encodeURIComponent("【安パト是正完了】" + z.site)
       + "&body=" + encodeURIComponent(body);
@@ -1725,16 +1746,23 @@ function syncNow(showResult){
 }
 
 function renderRoutes(){
-  document.getElementById("routelist").innerHTML = masters.ptypes.map((p,i)=>`
+  document.getElementById("routelist").innerHTML = masters.ptypes.map((p,i)=>{
+    const sel = routeRoles(routes[p]);
+    return `
     <div style="border-top:1px solid var(--line); padding:10px 0;">
       <div style="font-size:13px; font-weight:bold;">${p}</div>
-      <label>報告先の役職</label><input type="text" id="ry_${i}" value="${(routes[p]||{}).yaku||"上司"}">
+      <label>報告先の役職（複数選択できます）</label>
+      <div style="display:flex; flex-wrap:wrap; gap:6px; margin:4px 0;">` +
+      ROLES.map(rl=>`<label style="display:inline-flex; align-items:center; gap:5px; border:1px solid var(--line); border-radius:8px; padding:7px 10px; font-size:13px; background:#fff;"><input type="checkbox" class="rt_${i}" value="${rl}" ${sel.includes(rl)?"checked":""}>${rl}</label>`).join("") +
+      `</div>
       <label>報告先メールアドレス（任意）</label><input type="text" id="rm_${i}" value="${(routes[p]||{}).mail||""}" placeholder="例）jomu@example.co.jp">
-    </div>`).join("");
+    </div>`;
+  }).join("");
 }
 function saveRoutes(){
   masters.ptypes.forEach((p,i)=>{
-    routes[p] = {yaku:document.getElementById("ry_"+i).value||"上司", mail:document.getElementById("rm_"+i).value||""};
+    const yakus = Array.from(document.querySelectorAll(".rt_"+i+":checked")).map(el=>el.value);
+    routes[p] = {yakus: yakus, mail: (document.getElementById("rm_"+i)||{}).value||""};
   });
   lsSet("anpat_routes", routes);
   if(lsGet("anpat_adminkey","")){
