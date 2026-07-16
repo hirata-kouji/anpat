@@ -244,8 +244,10 @@
 
 <div id="page-bunseki" style="display:none">
   <div class="card">
-    <h2>集計・傾向分析</h2>
+    <h2>集計・傾向分析（サーバー連動・全端末合算）</h2>
+    <div class="note" id="bn_sync" style="margin-bottom:8px;">このタブを開くと同期サーバから全端末のデータを取得して集計します。</div>
     <div id="bn_summary"></div>
+    <div class="actions"><button class="a-back" onclick="syncNow(false)">🔄 最新データに更新</button></div>
   </div>
   <div class="card"><h2>区分別 指摘件数（共通／工種別／月間重点）</h2><div id="bn_cats"></div></div>
   <div class="card"><h2>共通基本項目 指摘ランキング（上位10）</h2><div id="bn_items_c"></div></div>
@@ -253,16 +255,30 @@
   <div class="card"><h2>現場別 指摘件数</h2><div id="bn_sites"></div></div>
   <div class="card"><h2>月別推移（パトロール回数／指摘件数）</h2><div id="bn_months"></div>
     <div class="actions"><button class="a-copy" onclick="exportLedgerCSV()">分析データをExcel出力（CSV）</button></div>
-    <div class="note">※集計対象はこの端末に蓄積された確定済み報告書と是正台帳です。全端末のデータを統合した全社集計はAppSheet版で実現します。</div>
+    <div class="note">※集計対象は同期サーバに統合された全端末の確定済み報告書・是正台帳です（タブを開いたとき・「最新データに更新」で自動的に最新化）。同期URL未設定の端末では、この端末のデータのみが対象になります。</div>
   </div>
   <div class="card">
     <h2 id="bn_arch_title">アーカイブ（完了・承認済の是正案件）</h2>
-    <div id="bn_archive"></div>
-    <div class="note">※完了・承認済みの案件は是正管理タブから自動的にこちらへ移動して保管されます（集計・CSV・正式報告書には引き続き含まれます）。</div>
+    <div style="display:flex; gap:8px;">
+      <select id="archY" onchange="renderArchive()" style="flex:1;"></select>
+      <select id="archM" onchange="renderArchive()" style="flex:1;"></select>
+    </div>
+    <div id="bn_archive" style="margin-top:8px;"></div>
+    <div class="actions">
+      <button class="a-copy" onclick="printArchive()">アーカイブ出力（PDF）</button>
+      <button class="a-copy" onclick="exportArchiveCSV()">Excel出力（CSV）</button>
+    </div>
+    <div class="note">※完了・承認済みの案件は是正管理タブから自動的にこちらへ移動し、月ごとに年間保管されます。年・月を選んで閲覧でき、選択した期間のPDF（写真付き）・CSVを出力できます。</div>
   </div>
 </div>
 
-<div id="page-config" style="display:none">
+<div id="page-admin" style="display:none">
+  <div class="card" style="padding:10px 14px;">
+    <div style="display:flex; justify-content:space-between; align-items:center;">
+      <b style="color:var(--navy); font-size:15px;">🔒 管理者ページ</b>
+      <button class="a-back" style="padding:8px 16px; border:none; border-radius:8px; font-weight:bold;" onclick="showPage('config')">← 設定に戻る</button>
+    </div>
+  </div>
   <div class="card" id="card-masters">
     <h2>マスタ設定（工事名・種別・チェック項目）</h2>
     <div class="note" id="adminNote" style="display:none;color:#c62828;margin-bottom:6px;">マスタは管理者のみ変更できます。下の「自動同期設定」に管理者キーを入力すると編集でき、保存すると同期で全端末に配信されます。</div>
@@ -292,6 +308,15 @@
     <div class="actions"><button class="a-copy" onclick="saveRoutes()">設定を保存</button></div>
   </div>
   <div class="card">
+    <h2>データの初期化</h2>
+    <div class="note" style="margin-bottom:6px;">報告書・是正案件・通知のデータを削除します（工事名などのマスタ、報告先設定、自分の情報、同期設定は残ります）。<br><b>管理者用ボタン</b>は、サーバのデータを削除したうえで全端末にも反映され、削除済みの古いデータが同期で戻ることもありません。年度替わり等の初期化にも使えます（実行前にExcel・PDFでの保管をおすすめします）。</div>
+    <div class="actions"><button style="flex:1;background:#7b1fa2;color:#fff;border:none;border-radius:8px;padding:12px 0;font-size:14px;font-weight:bold;" onclick="adminPurge()">サーバと全端末のデータを削除（管理者）</button></div>
+    <div class="actions"><button style="flex:1;background:var(--ng);color:#fff;border:none;border-radius:8px;padding:12px 0;font-size:14px;font-weight:bold;" onclick="clearAllData()">この端末のデータのみ削除</button></div>
+  </div>
+</div>
+
+<div id="page-config" style="display:none">
+  <div class="card">
     <h2>自分の情報（通知の宛先照合用）</h2>
     <label>氏名（点検者名・現場担当者名と同じ表記にしてください）</label>
     <input type="text" id="me_name" placeholder="例）山田太郎">
@@ -311,10 +336,9 @@
     <div class="actions"><button class="a-copy" onclick="saveSyncUrl()">同期設定を保存</button></div>
   </div>
   <div class="card">
-    <h2>データの初期化</h2>
-    <div class="note" style="margin-bottom:6px;">報告書・是正案件・通知のデータを削除します（工事名などのマスタ、報告先設定、自分の情報、同期設定は残ります）。<br><b>管理者用ボタン</b>は、サーバのデータを削除したうえで全端末にも反映され、削除済みの古いデータが同期で戻ることもありません。年度替わり等の初期化にも使えます（実行前にExcel・PDFでの保管をおすすめします）。</div>
-    <div class="actions"><button style="flex:1;background:#7b1fa2;color:#fff;border:none;border-radius:8px;padding:12px 0;font-size:14px;font-weight:bold;" onclick="adminPurge()">サーバと全端末のデータを削除（管理者）</button></div>
-    <div class="actions"><button style="flex:1;background:var(--ng);color:#fff;border:none;border-radius:8px;padding:12px 0;font-size:14px;font-weight:bold;" onclick="clearAllData()">この端末のデータのみ削除</button></div>
+    <h2>管理者メニュー</h2>
+    <div class="note" style="margin-bottom:6px;">チェック項目・工事名・報告先の変更、データの初期化は管理者専用ページで行います（上の「自動同期設定」で管理者キーの入力が必要です）。</div>
+    <div class="actions"><button class="a-copy" onclick="openAdmin()">🔒 管理者ページを開く</button></div>
   </div>
 </div>
 </main>
@@ -381,7 +405,7 @@
 
     <details><summary style="font-weight:bold; color:var(--navy); padding:8px 0; cursor:pointer;">⚙️ 管理者の操作（チェック項目の変更など）</summary>
       <div style="padding:4px 0 8px;">
-      「設定」タブの「自動同期設定」に<b>管理者キー</b>を入力すると、マスタ設定（工事名・種別・チェック項目・見るポイント）と報告先設定が編集できます。「マスタを保存」すると<b>全員のスマホに自動配信</b>されます。月間重点項目の毎月差し替えもここから行います
+      「設定」タブの「自動同期設定」に<b>管理者キー</b>を入力して保存し、「管理者メニュー」→「🔒 管理者ページを開く」から専用ページに入ります。マスタ設定（工事名・種別・チェック項目・見るポイント）、報告先設定、データの初期化はすべてこのページで行い、「マスタを保存」すると<b>全員のスマホに自動配信</b>されます。月間重点項目の毎月差し替えもここから行います
       </div>
     </details>
 
@@ -1355,18 +1379,113 @@ function renderBunseki(){
   document.getElementById("bn_months").innerHTML = months.length?
     months.map(k=>bnBar(k+"　パトロール", mAll[k].p, maxM, "var(--blue)") + bnBar(k+"　指摘", mAll[k].n, maxM, "var(--ng)")).join("")
     : '<div class="note">まだデータがありません。</div>';
-  // アーカイブ（完了・承認済）
-  const archEsc = s=>String(s==null?"":s).replace(/&/g,"&amp;").replace(/</g,"&lt;");
-  const arch = done.slice().sort((a,b)=>String(b.approved?b.approved.date:"").localeCompare(String(a.approved?a.approved.date:"")));
-  document.getElementById("bn_arch_title").textContent = "アーカイブ（完了・承認済の是正案件　全"+arch.length+"件）";
-  document.getElementById("bn_archive").innerHTML = arch.length?
-    arch.slice(0,100).map(z=>`<div class="zcard">
+  // アーカイブ（完了・承認済／月ごとに年間保管）
+  renderArchive();
+}
+
+// ===== アーカイブ（月別・年間保管と出力） =====
+function archList(){ return ledger.filter(z=>z.status==="完了"); }
+function archMonth(z){ return String((z.approved && z.approved.date) || z.date || "").slice(0,7); }
+function archSelected(){
+  const y = (document.getElementById("archY")||{}).value || "";
+  const m = (document.getElementById("archM")||{}).value || "";
+  return archList().filter(z=>{
+    const k = archMonth(z);
+    return k.slice(0,4)===y && (!m || k.slice(5,7)===m);
+  });
+}
+function renderArchive(){
+  const selY = document.getElementById("archY");
+  const selM = document.getElementById("archM");
+  if(!selY || !selM) return;
+  const all = archList();
+  const years = [...new Set(all.map(z=>archMonth(z).slice(0,4)).filter(s=>/^\d{4}$/.test(s)))].sort().reverse();
+  const curY = String(new Date().getFullYear());
+  if(!years.includes(curY)) years.unshift(curY);
+  const prevY = selY.value, prevM = selM.value;
+  selY.innerHTML = years.map(y=>`<option value="${y}">${y}年</option>`).join("");
+  if(years.includes(prevY)) selY.value = prevY;
+  selM.innerHTML = '<option value="">1年分すべて</option>'
+    + Array.from({length:12}, (_,i)=>`<option value="${String(i+1).padStart(2,"0")}">${i+1}月</option>`).join("");
+  if(prevM) selM.value = prevM;
+  const y = selY.value, m = selM.value;
+  const list = archSelected().sort((a,b)=>
+    String(archMonth(b)).localeCompare(String(archMonth(a)))
+    || String((b.approved||{}).date||"").localeCompare(String((a.approved||{}).date||"")));
+  document.getElementById("bn_arch_title").textContent =
+    "アーカイブ（完了・承認済　" + y + "年" + (m? parseInt(m,10)+"月" : "・年間") + "　全" + list.length + "件）";
+  const esc = s=>String(s==null?"":s).replace(/&/g,"&amp;").replace(/</g,"&lt;");
+  let html = "", curKey = "";
+  list.forEach(z=>{
+    const k = archMonth(z);
+    if(k !== curKey){
+      curKey = k;
+      const cnt = list.filter(x=>archMonth(x)===k).length;
+      html += `<div style="font-weight:bold; color:var(--navy); border-bottom:2px solid var(--navy); padding:8px 0 4px; margin-top:6px;">📁 ${parseInt(k.slice(0,4),10)}年${parseInt(k.slice(5,7),10)}月（${cnt}件）</div>`;
+    }
+    html += `<div class="zcard" style="margin-top:8px;">
       <span class="chip s-done">完了</span>
-      <div style="font-weight:bold; margin-top:4px; line-height:1.5;">${archEsc(z.item)}</div>
-      <div class="zmeta">${archEsc(z.site)}｜${archEsc(z.ptype)}</div>
-      <div class="zmeta">指摘日 ${archEsc(z.date)}｜是正報告 ${archEsc(z.fix?z.fix.date:"")}｜承認 ${archEsc(z.approved?z.approved.date:"")}｜担当 ${archEsc(z.tanto||"")}</div>
-    </div>`).join("")
-    : '<div class="note">完了した案件はまだありません。</div>';
+      <div style="font-weight:bold; margin-top:4px; line-height:1.5;">${esc(z.item)}</div>
+      <div class="zmeta">${esc(z.site)}｜${esc(z.ptype)}</div>
+      <div class="zmeta">指摘日 ${esc(z.date)}｜是正報告 ${esc(z.fix?z.fix.date:"")}｜承認 ${esc(z.approved?z.approved.date:"")}｜担当 ${esc(z.tanto||"")}</div>
+    </div>`;
+  });
+  document.getElementById("bn_archive").innerHTML = html || '<div class="note">この期間に完了した案件はありません。</div>';
+}
+function printArchive(){
+  const y = document.getElementById("archY").value;
+  const m = document.getElementById("archM").value;
+  const list = archSelected().sort((a,b)=>
+    String(archMonth(a)).localeCompare(String(archMonth(b)))
+    || String((a.approved||{}).date||"").localeCompare(String((b.approved||{}).date||"")));
+  if(!list.length){ alert("この期間に完了した案件はありません。"); return; }
+  const esc = s=>String(s==null?"":s).replace(/&/g,"&amp;").replace(/</g,"&lt;");
+  const period = y + "年" + (m? parseInt(m,10)+"月" : "（年間）");
+  let body = "", curKey = "";
+  list.forEach(z=>{
+    const k = archMonth(z);
+    if(k !== curKey){
+      curKey = k;
+      body += `<h2>${parseInt(k.slice(0,4),10)}年${parseInt(k.slice(5,7),10)}月</h2>`;
+    }
+    body += `<div class="z"><b>${esc(z.item)}</b>
+      <div class="m">${esc(z.site)}｜${esc(z.ptype)}｜区分 ${esc(itemCat(z))}｜指摘日 ${esc(z.date)}｜点検者 ${esc(z.inspector)}｜担当 ${esc(z.tanto||"")}</div>`;
+    if(z.comment) body += `<div>指摘内容：${esc(z.comment)}</div>`;
+    (z.photos||[]).forEach(p=>body += `<img src="${p}">`);
+    if(z.fix){
+      body += `<div class="fx">是正報告（${esc(z.fix.date)}）：${esc(z.fix.comment||"")}</div>`;
+      (z.fix.photos||[]).forEach(p=>body += `<img src="${p}">`);
+    }
+    body += `<div><b>是正完了確認：${esc(z.approved?z.approved.date:"")}（承認済）</b></div></div>`;
+  });
+  const html = `<!DOCTYPE html><html lang="ja"><head><meta charset="UTF-8"><title>是正完了記録（アーカイブ）${esc(period)}</title>
+<style>body{font-family:"Hiragino Kaku Gothic ProN","Yu Gothic",Meiryo,sans-serif;max-width:720px;margin:0 auto;padding:16px;font-size:13px;line-height:1.7;}
+h1{font-size:18px;color:#1f3864;} h2{font-size:15px;color:#1f3864;border-bottom:2px solid #1f3864;padding-bottom:4px;margin:18px 0 8px;}
+.z{border:1px solid #ccc;border-radius:8px;padding:10px;margin:10px 0;page-break-inside:avoid;}
+.m{color:#666;font-size:11px;} .fx{color:#b26500;} img{max-width:45%;margin:4px;border:1px solid #ddd;border-radius:6px;}</style></head><body>
+<h1>㈱中西組　安全パトロール 是正完了記録（アーカイブ）　${esc(period)}　全${list.length}件</h1>
+${body}
+<div style="font-size:10px;color:#777;text-align:right;">出力日：${new Date().toISOString().slice(0,10)}</div>
+<script>setTimeout(function(){window.print();},500);<\/script></body></html>`;
+  const w = window.open("", "_blank");
+  if(!w){ alert("ポップアップがブロックされました。ブラウザの設定でこのサイトのポップアップを許可してください。"); return; }
+  w.document.write(html); w.document.close();
+}
+function exportArchiveCSV(){
+  const y = document.getElementById("archY").value;
+  const m = document.getElementById("archM").value;
+  const list = archSelected().sort((a,b)=>String(archMonth(a)).localeCompare(String(archMonth(b))));
+  if(!list.length){ alert("この期間に完了した案件はありません。"); return; }
+  const head = ["完了月","指摘日","工事名","パトロール種別","点検者","現場担当者","区分","指摘事項","指摘内容","是正報告日","是正内容","承認日"];
+  const rows = list.map(z=>[
+    archMonth(z), z.date, z.site, z.ptype, z.inspector, z.tanto||"", itemCat(z), z.item, z.comment||"",
+    z.fix? z.fix.date : "", z.fix? (z.fix.comment||"") : "", z.approved? z.approved.date : ""
+  ]);
+  const csv = "﻿" + [head].concat(rows).map(r=>r.map(csvEsc).join(",")).join("\r\n");
+  const blob = new Blob([csv], {type:"text/csv;charset=utf-8"});
+  const a = document.createElement("a"); a.href = URL.createObjectURL(blob);
+  a.download = "安パト是正アーカイブ_" + y + (m? "-"+m : "_年間") + ".csv";
+  a.click(); URL.revokeObjectURL(a.href);
 }
 
 function backToInput(){
@@ -1553,7 +1672,10 @@ function saveSyncUrl(){
       : "同期URLを削除しました（この端末のみに保存されます）。");
   if(u) syncNow(true);
 }
-function setSyncStatus(t){ const el = document.getElementById("syncStatus"); if(el) el.textContent = t; }
+function setSyncStatus(t){
+  const el = document.getElementById("syncStatus"); if(el) el.textContent = t;
+  const b = document.getElementById("bn_sync"); if(b) b.textContent = t.replace(/^同期：/, "サーバー連動：");
+}
 let syncing = false;
 function syncNow(showResult){
   const url = getSyncUrl();
@@ -1585,7 +1707,7 @@ function syncNow(showResult){
         if(d.routes) routes = Object.assign({}, DEFAULT_ROUTES, d.routes);
         lsSet("anpat_masters", masters); lsSet("anpat_routes", routes); lsSet("anpat_mver", d.mver);
         refreshSelects(); render();
-        if(document.getElementById("page-config").style.display==="block") renderConfig();
+        if(document.getElementById("page-admin").style.display==="block") renderAdmin();
       }
       updateBadge();
       updateNotifBadge();
@@ -1632,6 +1754,9 @@ function renderConfig(){
   document.getElementById("me_mail").value = me.mail||"";
   document.getElementById("syncUrl").value = getSyncUrl();
   document.getElementById("adminKey").value = lsGet("anpat_adminkey","");
+}
+// 管理者ページの描画
+function renderAdmin(){
   document.getElementById("ms_sites").value = masters.sites.join("\n");
   document.getElementById("ms_ptypes").value = masters.ptypes.join("\n");
   document.getElementById("ms_common").value = masters.common.join("\n");
@@ -1641,6 +1766,14 @@ function renderConfig(){
   renderModulesEditor();
   renderRoutes();
   applyAdminLock();
+}
+// 管理者ページの入口（管理者キー必須）
+function openAdmin(){
+  if(!lsGet("anpat_adminkey","")){
+    alert("管理者ページを開くには、「自動同期設定」で管理者キーを入力して保存してください。");
+    return;
+  }
+  showPage("admin");
 }
 // 管理者キー未設定の端末ではマスタ・報告先を編集不可にする
 function applyAdminLock(){
@@ -1765,17 +1898,19 @@ function closeHelp(){
 }
 
 function showPage(p){
-  const pages = {input:"page-input", zesei:"page-zesei", notif:"page-notif", bunseki:"page-bunseki", config:"page-config"};
+  const pages = {input:"page-input", zesei:"page-zesei", notif:"page-notif", bunseki:"page-bunseki", config:"page-config", admin:"page-admin"};
   for(const k in pages) document.getElementById(pages[k]).style.display = (k===p)?"block":"none";
   document.getElementById("page-report").style.display = "none";
   document.getElementById("progressbar").style.display = (p==="input")?"flex":"none";
+  const tabKey = (p==="admin") ? "config" : p; // 管理者ページ中は設定タブを点灯
   ["input","zesei","notif","bunseki","config"].forEach(k=>{
-    document.getElementById("tab-"+k).className = "tab"+(k===p?" active":"");
+    document.getElementById("tab-"+k).className = "tab"+(k===tabKey?" active":"");
   });
   if(p==="zesei"){ renderZesei(); syncNow(false); }
   if(p==="notif"){ renderNotif(); syncNow(false); }
   if(p==="bunseki"){ renderBunseki(); syncNow(false); }
   if(p==="config") renderConfig();
+  if(p==="admin") renderAdmin();
   window.scrollTo(0,0);
 }
 
