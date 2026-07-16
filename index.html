@@ -285,8 +285,8 @@
     <div class="note" style="margin-bottom:6px;">1行に1件で入力してください。「マスタを保存」で点検入力に即反映され、同期により全端末へ配信されます（各端末の入力中の点検はリセットされます）。</div>
     <label>工事名リスト</label>
     <textarea id="ms_sites" style="min-height:130px"></textarea>
-    <label>パトロール種別リスト（変更したら下の報告先設定も確認してください）</label>
-    <textarea id="ms_ptypes" style="min-height:100px"></textarea>
+    <label>パトロール種別リスト（追加すると下の「報告先設定」に自動で行が増えます）</label>
+    <textarea id="ms_ptypes" style="min-height:100px" oninput="onPtypesInput()"></textarea>
     <label>役職リスト（1行1件。「自分の情報」の役職選択と報告先設定に連動します）</label>
     <textarea id="ms_roles" style="min-height:90px"></textarea>
     <label>① 共通基本項目</label>
@@ -305,7 +305,7 @@
   </div>
   <div class="card" id="card-routes">
     <h2>報告先設定（パトロール種別 × 役職）</h2>
-    <div class="note" style="margin-bottom:6px;">是正完了の承認時に、どの役職へ報告するかを種別ごとに設定します（例：店社・重点パトは常務以上へ）。メールアドレスを入れると宛先も自動セットされます。</div>
+    <div class="note" style="margin-bottom:6px;">安パト報告・是正完了報告をどの役職へ届けるかを種別ごとに設定します（複数選択可）。上のマスタ設定で種別を追加・変更すると、この一覧も自動で連動します。メールアドレスを入れるとメール送信時の宛先も自動セットされます。</div>
     <div id="routelist"></div>
     <div class="actions"><button class="a-copy" onclick="saveRoutes()">設定を保存</button></div>
   </div>
@@ -1744,13 +1744,17 @@ function syncNow(showResult){
     .finally(()=>{ syncing = false; });
 }
 
-function renderRoutes(){
-  document.getElementById("routelist").innerHTML = masters.ptypes.map((p,i)=>{
+let routesRendered = []; // 現在報告先設定に表示中の種別リスト
+function renderRoutes(listOpt){
+  const list = (listOpt && listOpt.length) ? listOpt : masters.ptypes;
+  routesRendered = list.slice();
+  document.getElementById("routelist").innerHTML = list.map((p,i)=>{
     const sel = routeRoles(routes[p]);
     const opts = [...new Set([...rolesList(), ...sel])]; // 選択済みの旧役職も表示して外せるように
     return `
     <div style="border-top:1px solid var(--line); padding:10px 0;">
       <div style="font-size:13px; font-weight:bold;">${p}</div>
+      ${sel.length? "" : '<div style="color:var(--ng); font-size:11px; font-weight:bold;">⚠ 報告先が未選択です（この種別の報告通知は届きません）</div>'}
       <label>報告先の役職（複数選択できます）</label>
       <div style="display:flex; flex-wrap:wrap; gap:6px; margin:4px 0;">` +
       opts.map(rl=>`<label style="display:inline-flex; align-items:center; gap:5px; border:1px solid var(--line); border-radius:8px; padding:7px 10px; font-size:13px; background:#fff;"><input type="checkbox" class="rt_${i}" value="${rl}" ${sel.includes(rl)?"checked":""}>${rl}</label>`).join("") +
@@ -1759,11 +1763,24 @@ function renderRoutes(){
     </div>`;
   }).join("");
 }
-function saveRoutes(){
-  masters.ptypes.forEach((p,i)=>{
+// 表示中の報告先設定の選択状態を（保存せず）読み取る
+function collectRoutesUI(){
+  routesRendered.forEach((p,i)=>{
+    const boxes = document.querySelectorAll(".rt_"+i);
+    if(!boxes.length) return;
     const yakus = Array.from(document.querySelectorAll(".rt_"+i+":checked")).map(el=>el.value);
     routes[p] = {yakus: yakus, mail: (document.getElementById("rm_"+i)||{}).value||""};
   });
+}
+// 種別リストの入力に合わせて報告先設定をリアルタイム連動
+function onPtypesInput(){
+  collectRoutesUI(); // 入力中の選択を失わないよう退避
+  const list = document.getElementById("ms_ptypes").value.split("\n").map(s=>s.trim()).filter(Boolean);
+  renderRoutes(list.length ? list : masters.ptypes);
+  applyAdminLock();
+}
+function saveRoutes(){
+  collectRoutesUI();
   lsSet("anpat_routes", routes);
   if(lsGet("anpat_adminkey","")){
     lsSet("anpat_mver", Date.now());
