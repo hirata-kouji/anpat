@@ -422,6 +422,14 @@
   </div>
 </div>
 
+<!-- 既読通知のポップアップ（メールを開くイメージ） -->
+<div id="notifov" style="display:none; position:fixed; inset:0; background:rgba(15,25,50,.6); z-index:60; overflow:auto; -webkit-overflow-scrolling:touch;" onclick="closeNotif()">
+  <div style="background:#fff; border-radius:14px; margin:56px 14px 30px; padding:16px; box-shadow:0 8px 24px rgba(0,0,0,.3);" onclick="event.stopPropagation()">
+    <div id="nov_body"></div>
+    <div class="actions"><button class="a-copy" onclick="closeNotif()">閉じる</button></div>
+  </div>
+</div>
+
 <!-- オフライン未送信バナー（是正データはサーバー保管のみのため、未送信分を明示して再送を促す） -->
 <div id="offbar" style="display:none; position:fixed; left:12px; right:12px; bottom:14px; z-index:55; background:#fff8e1; border:2px solid #f5a623; border-radius:12px; padding:10px 12px; box-shadow:0 4px 14px rgba(0,0,0,.25);">
   <div style="font-size:13px; font-weight:bold; color:#b26a00;">⚠ 未送信の是正データがあります</div>
@@ -1230,20 +1238,54 @@ function renderNotif(){
   }
   if(!list.length){ wrap.innerHTML = '<div class="note">通知はありません。</div>'; return; }
   const esc = s=>String(s==null?"":s).replace(/&/g,"&amp;").replace(/</g,"&lt;");
-  wrap.innerHTML = list.map(n=>{
-    const unread = isMine(n) && !(n.read && n.read[key]);
+  const isUnread = n => isMine(n) && !(n.read && n.read[key]);
+  const unreadL = list.filter(isUnread);
+  const readL = list.filter(n=>!isUnread(n));
+  let h = "";
+  // 未読：これまでどおりのカード表示（メールの未読のイメージ）
+  h += `<div style="font-size:12px; font-weight:bold; color:var(--ng); margin:4px 0;">📬 未読 ${unreadL.length} 件</div>`;
+  h += unreadL.length ? unreadL.map(n=>{
     const toStr = n.to? (n.to.name? esc(n.to.name)+" さん" : esc(n.to.roles? n.to.roles.join("・") : (n.to.role||""))+" 宛") : "";
-    return `<div class="zcard" style="${unread? "border-color:var(--ng);":""}">
-      <span class="chip ${NTYPE_COLOR[n.type]||"s-fixed"}">${esc(n.type)}</span>${unread? ' <span class="deadline-over">未読</span>':""}
+    return `<div class="zcard" style="border-color:var(--ng);">
+      <span class="chip ${NTYPE_COLOR[n.type]||"s-fixed"}">${esc(n.type)}</span> <span class="deadline-over">未読</span>
       <div style="font-weight:bold; margin-top:6px;">${esc(n.title)}</div>
       <div class="zmeta">${esc(n.date)}｜${esc(n.from)} → ${toStr}</div>
       <div style="font-size:13px; white-space:pre-wrap; margin-top:4px;">${esc(n.body)}</div>
       <div class="actions">
         ${n.zid? '<button class="a-back" onclick="showPage(\'zesei\')">是正管理で開く</button>' : ""}
-        ${unread? `<button class="a-copy" onclick="markRead('${n.id}')">既読にする</button>` : ""}
+        <button class="a-copy" onclick="markRead('${n.id}')">既読にする</button>
       </div>
     </div>`;
-  }).join("");
+  }).join("") : '<div class="note">未読の通知はありません。</div>';
+  // 既読：メール一覧風の小さな1行表示（タップするとポップアップで全文表示）
+  if(readL.length){
+    h += `<div style="font-size:12px; font-weight:bold; color:#78909c; margin:16px 0 2px; border-top:1px solid var(--line); padding-top:10px;">📭 既読済み ${readL.length} 件${mode==="all"?"（自分宛て以外を含む）":""}　<span style="font-weight:normal;">タップで内容を表示</span></div>`;
+    h += readL.map(n=>`
+      <div onclick="openNotif('${n.id}')" style="display:flex; align-items:center; gap:8px; padding:9px 4px; border-bottom:1px solid var(--line); cursor:pointer; opacity:.85;">
+        <span class="chip ${NTYPE_COLOR[n.type]||"s-fixed"}" style="font-size:10px; padding:2px 7px; flex-shrink:0;">${esc(n.type)}</span>
+        <span style="font-size:12px; color:#37474f; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex:1; min-width:0;">${esc(n.title)}</span>
+        <span style="font-size:11px; color:#90a4ae; flex-shrink:0;">${esc(n.date)}</span>
+      </div>`).join("");
+  }
+  wrap.innerHTML = h;
+}
+// 既読通知のポップアップ表示（メールを開くイメージ）
+function openNotif(id){
+  const n = notifList().find(x=>x.id===id); if(!n) return;
+  const esc = s=>String(s==null?"":s).replace(/&/g,"&amp;").replace(/</g,"&lt;");
+  const toStr = n.to? (n.to.name? esc(n.to.name)+" さん" : esc(n.to.roles? n.to.roles.join("・") : (n.to.role||""))+" 宛") : "";
+  document.getElementById("nov_body").innerHTML = `
+    <span class="chip ${NTYPE_COLOR[n.type]||"s-fixed"}">${esc(n.type)}</span> <span style="font-size:11px; color:#78909c;">既読済み</span>
+    <div style="font-weight:bold; margin-top:8px; line-height:1.5;">${esc(n.title)}</div>
+    <div class="zmeta" style="margin:4px 0 8px;">${esc(n.date)}｜${esc(n.from)} → ${toStr}</div>
+    <div style="font-size:13px; white-space:pre-wrap; border-top:1px solid var(--line); padding-top:8px;">${esc(n.body)}</div>
+    ${n.zid? '<div class="actions"><button class="a-back" onclick="closeNotif(); showPage(\'zesei\')">是正管理で開く</button></div>' : ""}`;
+  document.getElementById("notifov").style.display = "block";
+  document.body.style.overflow = "hidden";
+}
+function closeNotif(){
+  document.getElementById("notifov").style.display = "none";
+  document.body.style.overflow = "";
 }
 function markRead(id){
   const me = getMe();
