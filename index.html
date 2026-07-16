@@ -377,16 +377,16 @@
       <div style="padding:4px 0 8px;">
       ① 「通知」タブに届いた【是正依頼】を確認（未読は赤バッジ）<br>
       ② 「是正管理」タブ → 立場を「<b>被点検者（是正報告）</b>」に切り替え<br>
-      ③ 該当案件に是正内容を記入し、是正後の写真を撮影 →「是正報告する」<br>
-      ④ 安パト者へ自動通知されます。承認されると【是正完了】の通知が届きます
+      ③ 報告書ごとにまとまって表示されます。各指摘に是正内容を記入し、是正後の写真を撮影<br>
+      ④ 「<b>この報告書の是正をまとめて報告する</b>」を1回タップ → 全指摘が一括で報告され、安パト者へ通知は1通です。承認されると【是正完了】の通知が届きます
       </div>
     </details>
 
     <details><summary style="font-weight:bold; color:var(--navy); padding:8px 0; cursor:pointer;">✅ 承認して上司へ報告（安パト者）</summary>
       <div style="padding:4px 0 8px;">
       ① 【是正報告】の通知が届いたら「是正管理」タブへ（立場：安パト者）<br>
-      ② 是正後の写真を確認し「<b>承認して ○○ へ完了報告</b>」をタップ<br>
-      ③ 上司と担当者へ完了通知が自動送信されます（報告先の役職は設定タブで変更可）<br>
+      ② 報告書ごとに是正後の写真を確認し「<b>まとめて承認して ○○ へ完了報告</b>」を1回タップ（報告書内の全指摘を一括承認）<br>
+      ③ 上司と担当者へ完了通知が1通ずつ自動送信されます（報告先の役職は設定タブで変更可）<br>
       ④ 完了した案件は「集計」タブのアーカイブへ自動で移動します
       </div>
     </details>
@@ -1612,6 +1612,9 @@ function addZPhoto(id, input){
 
 function photoRow(ps){ return (ps&&ps.length)? "<div>"+ps.map(p=>`<img src="${p}" class="thumb">`).join("")+"</div>" : ""; }
 
+// 是正は報告書単位で扱う（指摘1件ずつではなく、まとめて是正報告・まとめて承認）
+function zkey(z){ return z.repId || ("L_"+z.site+"_"+z.date); } // 旧データは工事名＋日付で束ねる
+let zGroupKeys = []; // 表示中の報告書グループ（ボタンから番号で参照）
 function renderZesei(){
   updateBadge();
   // 正式報告書の選択肢（確定済み報告書・新しい順）
@@ -1627,88 +1630,115 @@ function renderZesei(){
   const active = ledger.filter(z=>z.status!=="完了"); // 完了分は集計タブのアーカイブへ
   if(!active.length){ wrap.innerHTML='<div class="note">未完了の是正案件はありません。完了した案件は「集計」タブのアーカイブで確認できます。</div>'; return; }
   const todayS = new Date().toISOString().slice(0,10);
-  wrap.innerHTML = active.slice().reverse().map(z=>{
-    const chip = z.status==="未是正" ? '<span class="chip s-open">未是正</span>'
-      : z.status==="是正報告済" ? '<span class="chip s-fixed">是正報告済（承認待ち）</span>'
-      : '<span class="chip s-done">完了・報告済</span>';
-    const over = (z.status!=="完了" && z.deadline<todayS) ? ' <span class="deadline-over">⚠期限超過</span>' : '';
+  // 報告書単位にグループ化
+  const groups = {}; const order = [];
+  active.forEach(z=>{ const k=zkey(z); if(!groups[k]){ groups[k]=[]; order.push(k); } groups[k].push(z); });
+  order.reverse(); // 新しい報告書を上に
+  zGroupKeys = order;
+  wrap.innerHTML = order.map((k, gi)=>{
+    const items = groups[k];
+    const z0 = items[0];
+    const nOpen = items.filter(z=>z.status==="未是正").length;
+    const nFixed = items.filter(z=>z.status==="是正報告済").length;
+    const chip = nOpen
+      ? '<span class="chip s-open">未是正 '+nOpen+'件</span>'+(nFixed? ' <span class="chip s-fixed">報告済 '+nFixed+'件</span>' : '')
+      : '<span class="chip s-fixed">是正報告済（承認待ち '+nFixed+'件）</span>';
+    const over = items.some(z=>z.status!=="完了" && z.deadline<todayS) ? ' <span class="deadline-over">⚠期限超過</span>' : '';
+    const dl = items.map(z=>z.deadline).sort()[0];
     let h = `<div class="zcard">${chip}${over}
-      <div style="font-weight:bold; margin-top:6px; line-height:1.5;">${z.item}</div>
-      <div class="zmeta">${z.site}</div>
-      <div class="zmeta">${z.ptype}｜指摘日 ${z.date}｜是正期限 ${z.deadline}｜点検者 ${z.inspector}｜担当 ${z.tanto||"未記入"}</div>
-      ${z.comment?`<div style="font-size:13px;">→ ${z.comment}</div>`:""}
-      ${photoRow(z.photos)}`;
-    if(z.fix){
-      h += `<div style="border-top:1px dashed var(--line); margin-top:8px; padding-top:8px;">
-        <b style="font-size:12px; color:var(--warn);">是正報告（${z.fix.date}）</b>
-        <div style="font-size:13px;">${z.fix.comment||""}</div>${photoRow(z.fix.photos)}</div>`;
-    }
-    if(z.status==="未是正" && role==="fix"){
-      h += `<div style="margin-top:8px;">
-        <textarea id="zc_${z.id}" placeholder="是正内容を記入"></textarea>
-        <label class="photo-btn">📷 撮影<input type="file" accept="image/*" capture="environment" style="display:none" onchange="addZPhoto('${z.id}',this)"></label>　<label class="photo-btn">🖼️ フォルダから選択<input type="file" accept="image/*" multiple style="display:none" onchange="addZPhoto('${z.id}',this)"></label>
-        <div id="zp_${z.id}"></div>
-        <button class="zbtn" style="background:var(--warn);" onclick="submitFix('${z.id}')">是正報告する</button></div>`;
-    }
-    if(z.status==="未是正" && role==="pat"){
-      h += `<div class="note">被点検者の是正報告待ちです。</div>`;
-    }
-    if(z.status==="是正報告済" && role==="pat"){
-      h += `<button class="zbtn" style="background:var(--ok);" onclick="approveFix('${z.id}')">承認して ${routeLabel(routes[z.ptype])} へ完了報告</button>`;
-    }
-    if(z.status==="是正報告済" && role==="fix"){
-      h += `<div class="note">安パト者の承認待ちです。</div>`;
-    }
-    if(z.status==="完了"){
-      h += `<div class="zmeta">承認日 ${z.approved?z.approved.date:""}｜報告先 ${routeLabel(routes[z.ptype])}</div>`;
+      <div style="font-weight:bold; margin-top:6px; line-height:1.5;">${z0.site}</div>
+      <div class="zmeta">${z0.ptype}｜指摘日 ${z0.date}｜是正期限 ${dl}｜点検者 ${z0.inspector}｜担当 ${z0.tanto||"未記入"}｜指摘 ${items.length}件</div>`;
+    h += items.map((z,i)=>{
+      const st = z.status==="未是正"
+        ? '<span style="color:var(--ng); font-size:12px; font-weight:bold;">未是正</span>'
+        : '<span style="color:var(--warn); font-size:12px; font-weight:bold;">是正報告済</span>';
+      let ih = `<div style="border-top:1px dashed var(--line); margin-top:8px; padding-top:8px;">
+        <div style="font-size:13px; font-weight:bold; line-height:1.5;">(${i+1}) ${z.item}　${st}</div>
+        ${z.comment?`<div style="font-size:13px;">→ ${z.comment}</div>`:""}
+        ${photoRow(z.photos)}`;
+      if(z.fix){
+        ih += `<div style="margin-top:6px;">
+          <b style="font-size:12px; color:var(--warn);">是正報告（${z.fix.date}）</b>
+          <div style="font-size:13px;">${z.fix.comment||""}</div>${photoRow(z.fix.photos)}</div>`;
+      }
+      if(z.status==="未是正" && role==="fix"){
+        ih += `<div style="margin-top:6px;">
+          <textarea id="zc_${z.id}" placeholder="この指摘の是正内容を記入"></textarea>
+          <label class="photo-btn">📷 撮影<input type="file" accept="image/*" capture="environment" style="display:none" onchange="addZPhoto('${z.id}',this)"></label>　<label class="photo-btn">🖼️ フォルダから選択<input type="file" accept="image/*" multiple style="display:none" onchange="addZPhoto('${z.id}',this)"></label>
+          <div id="zp_${z.id}"></div></div>`;
+      }
+      return ih+"</div>";
+    }).join("");
+    // 報告書単位の操作（各指摘に記入・撮影のうえ、送信は1回）
+    if(role==="fix"){
+      if(nOpen) h += `<button class="zbtn" style="background:var(--warn);" onclick="submitFixRep(${gi})">この報告書の是正をまとめて報告する（${nOpen}件）</button>`;
+      else h += `<div class="note">安パト者の承認待ちです。</div>`;
+    } else {
+      if(nFixed) h += `<button class="zbtn" style="background:var(--ok);" onclick="approveFixRep(${gi})">まとめて承認して ${routeLabel(routes[z0.ptype])} へ完了報告（${nFixed}件）</button>`;
+      if(nOpen) h += `<div class="note">被点検者の是正報告待ちです${nFixed? "（未是正 "+nOpen+" 件が残っています）" : "。"}</div>`;
     }
     return h+"</div>";
   }).join("");
 }
 
-function submitFix(id){
-  const z = ledger.find(x=>x.id===id); if(!z) return;
-  const c = (document.getElementById("zc_"+id)||{}).value||"";
-  const ps = zPhotoTemp[id]||[];
-  if(!ps.length && !confirm("是正後の写真がありません。このまま報告しますか？（原則写真1枚）")) return;
-  z.fix = {date:new Date().toISOString().slice(0,10), comment:c, photos:ps};
-  z.status = "是正報告済";
-  delete zPhotoTemp[id];
-  queuePending(z); renderZesei();
-  // アプリ内通知：安パト者（点検者）へ是正報告
-  notify({name:z.inspector}, "是正報告",
-    "【是正報告】"+z.site,
-    "指摘事項："+z.item+"\n是正日："+z.fix.date+(z.fix.comment?("\n是正内容："+z.fix.comment):"")+"\n（是正後の写真は「是正管理」で確認し、承認してください）",
-    z.id);
+// 報告書単位の是正報告：記入済みの各指摘をまとめて報告し、点検者へ通知は1通
+function submitFixRep(gi){
+  const key = zGroupKeys[gi]; if(key===undefined) return;
+  const items = ledger.filter(z=>z.status==="未是正" && zkey(z)===key);
+  if(!items.length) return;
+  const noPhoto = items.filter(z=>!(zPhotoTemp[z.id]||[]).length).length;
+  if(noPhoto && !confirm("是正後の写真がない指摘が "+noPhoto+" 件あります。このまままとめて報告しますか？（原則、各指摘に写真1枚）")) return;
+  const d = new Date().toISOString().slice(0,10);
+  items.forEach(z=>{
+    z.fix = {date:d, comment:(document.getElementById("zc_"+z.id)||{}).value||"", photos:zPhotoTemp[z.id]||[]};
+    z.status = "是正報告済";
+    delete zPhotoTemp[z.id];
+    queuePending(z);
+  });
+  renderZesei();
+  const z0 = items[0];
+  notify({name:z0.inspector}, "是正報告",
+    "【是正報告】"+z0.site+"（"+items.length+"件）",
+    "報告書："+z0.date+"　"+z0.ptype+"\n是正日："+d+"\n\n"
+      + items.map((z,i)=>"("+(i+1)+") "+z.item+(z.fix.comment?("\n　是正内容："+z.fix.comment):"")).join("\n")
+      + "\n\n（是正後の写真は「是正管理」で確認し、まとめて承認してください）",
+    z0.repId||z0.id);
   syncNow(false);
+  alert("是正報告を送信しました（"+items.length+"件まとめて）。点検者の承認をお待ちください。");
 }
 
-function approveFix(id){
-  const z = ledger.find(x=>x.id===id); if(!z) return;
-  z.status = "完了"; z.approved = {date:new Date().toISOString().slice(0,10)};
-  queuePending(z); renderZesei();
-  const rt = routes[z.ptype]||{yakus:["上司"], mail:""};
+// 報告書単位の承認：是正報告済の指摘をまとめて完了にし、上司・担当者へ通知は1通ずつ
+function approveFixRep(gi){
+  const key = zGroupKeys[gi]; if(key===undefined) return;
+  const items = ledger.filter(z=>z.status==="是正報告済" && zkey(z)===key);
+  if(!items.length) return;
+  const remainOpen = ledger.filter(z=>z.status==="未是正" && zkey(z)===key).length;
+  const d = new Date().toISOString().slice(0,10);
+  items.forEach(z=>{ z.status = "完了"; z.approved = {date:d}; queuePending(z); });
+  renderZesei();
+  const z0 = items[0];
+  const rt = routes[z0.ptype]||{yakus:["上司"], mail:""};
   const rtRoles = routeRoles(rt).length ? routeRoles(rt) : ["上司"];
   const body = "安全パトロール是正完了報告\n\n"
     + "報告先　：" + rtRoles.join("・") + "\n"
-    + "工事名　：" + z.site + "\n"
-    + "種別　　：" + z.ptype + "\n"
-    + "指摘日　：" + z.date + "（点検者 " + z.inspector + "）\n"
-    + "指摘事項：" + z.item + "\n"
-    + (z.comment? ("指摘内容：" + z.comment + "\n") : "")
-    + "是正報告：" + (z.fix? z.fix.date : "") + "　" + (z.fix && z.fix.comment? z.fix.comment : "") + "\n"
-    + "承認日　：" + z.approved.date + "\n\n"
+    + "工事名　：" + z0.site + "\n"
+    + "種別　　：" + z0.ptype + "\n"
+    + "指摘日　：" + z0.date + "（点検者 " + z0.inspector + "）\n"
+    + "承認件数：" + items.length + " 件" + (remainOpen? "（※未是正 "+remainOpen+" 件が別途残っています）" : "（この報告書の指摘はすべて是正完了）") + "\n\n"
+    + items.map((z,i)=>"("+(i+1)+") "+z.item
+        + (z.comment? ("\n　指摘内容：" + z.comment) : "")
+        + "\n　是正報告：" + (z.fix? z.fix.date : "") + "　" + (z.fix && z.fix.comment? z.fix.comment : "")).join("\n")
+    + "\n\n承認日　：" + d + "\n"
     + "※是正前後の写真はアプリの是正管理台帳をご確認ください。";
-  // アプリ内通知：上司（複数役職可）へ是正完了報告、担当者へ完了連絡
-  notify({roles:rtRoles}, "是正完了報告", "【是正完了報告】"+z.site, body, z.id);
-  if(z.tanto && z.tanto!=="（未記入）"){
-    notify({name:z.tanto}, "是正完了", "【是正完了】"+z.site,
-      "指摘事項："+z.item+"\n承認日："+z.approved.date+"\n是正を確認しました。ありがとうございました。", z.id);
+  notify({roles:rtRoles}, "是正完了報告", "【是正完了報告】"+z0.site+"（"+items.length+"件）", body, z0.repId||z0.id);
+  if(z0.tanto && z0.tanto!=="（未記入）"){
+    notify({name:z0.tanto}, "是正完了", "【是正完了】"+z0.site,
+      items.length+"件の是正を確認し、承認しました（承認日 "+d+"）。ありがとうございました。", z0.repId||z0.id);
   }
   syncNow(false);
-  if(confirm("承認しました。" + rtRoles.join("・") + " と担当者へアプリ内通知を送りました。\nメールでも完了報告を送りますか？")){
+  if(confirm("承認しました（"+items.length+"件まとめて）。" + rtRoles.join("・") + " と担当者へアプリ内通知を送りました。\nメールでも完了報告を送りますか？")){
     location.href = "mailto:" + encodeURIComponent(rt.mail||"")
-      + "?subject=" + encodeURIComponent("【安パト是正完了】" + z.site)
+      + "?subject=" + encodeURIComponent("【安パト是正完了】" + z0.site + "（"+items.length+"件）")
       + "&body=" + encodeURIComponent(body);
   }
 }
