@@ -413,7 +413,8 @@
 
     <details><summary style="font-weight:bold; color:var(--navy); padding:8px 0; cursor:pointer;">🆘 困ったとき</summary>
       <div style="padding:4px 0 8px;">
-      <b>同期に失敗する：</b>電波状況を確認→設定タブの同期URLが正しいか（末尾が /exec）→「今すぐ同期」で再試行。圏外でもデータは端末に残り、電波復帰後に自動同期されます<br>
+      <b>同期に失敗する：</b>電波状況を確認→設定タブの同期URLが正しいか（末尾が /exec）→「今すぐ同期」で再試行<br>
+      <b>「未送信の是正データがあります」と出た：</b>圏外などでサーバーに送れなかった状態です。データは消えません。電波の届く場所に戻ると自動で再送されます（バナーの「今すぐ再送」でも送信可）。是正データはサーバー保管のため、<b>再送が終わるまでアプリを消さない</b>でください<br>
       <b>通知が届かない：</b>設定タブ「自分の情報」の氏名が、点検入力で書かれた名前（点検者名・現場担当者名）と一致しているか確認<br>
       <b>アプリの更新が反映されない：</b>アプリを一度完全に閉じて開き直す<br>
       <b>ホーム画面に追加したい：</b>AndroidはChromeメニュー→「アプリをインストール」、iPhone/iPadはSafariの共有→「ホーム画面に追加」
@@ -422,6 +423,14 @@
 
     <div class="actions"><button class="a-copy" onclick="closeHelp()">閉じる</button></div>
   </div>
+</div>
+
+<!-- オフライン未送信バナー（是正データはサーバー保管のみのため、未送信分を明示して再送を促す） -->
+<div id="offbar" style="display:none; position:fixed; left:12px; right:12px; bottom:14px; z-index:55; background:#fff8e1; border:2px solid #f5a623; border-radius:12px; padding:10px 12px; box-shadow:0 4px 14px rgba(0,0,0,.25);">
+  <div style="font-size:13px; font-weight:bold; color:#b26a00;">⚠ 未送信の是正データがあります</div>
+  <div id="offbarText" style="font-size:12px; margin:4px 0 8px; line-height:1.5;"></div>
+  <button onclick="syncNow(true)" style="background:#1f3864; color:#fff; border:none; border-radius:8px; padding:8px 14px; font-size:13px;">今すぐ再送</button>
+  <button onclick="document.getElementById('offbar').style.display='none'" style="background:#eee; color:#333; border:none; border-radius:8px; padding:8px 14px; font-size:13px; margin-left:6px;">閉じる</button>
 </div>
 
 <div class="progress" id="progressbar">
@@ -949,16 +958,19 @@ function confirmReport(){
     const repId = "r"+Date.now()+Math.floor(Math.random()*1000);
     if(lastNg.length){
       const dl = new Date(lastMeta.date); dl.setDate(dl.getDate()+7);
-      lastNg.forEach(x=>ledger.push({
-        id: "z"+Date.now()+Math.floor(Math.random()*1000),
-        repId: repId,
-        site:lastMeta.site, ptype:lastMeta.ptype, date:lastMeta.date, inspector:lastMeta.inspector,
-        tanto:lastMeta.tanto, tantoMail:lastMeta.tantoMail,
-        item:x.item, comment:x.comment, photos:x.photos, cat:x.cat,
-        deadline: dl.toISOString().slice(0,10),
-        status:"未是正", fix:null, approved:null
-      }));
-      lsSet("anpat_ledger", ledger);
+      lastNg.forEach(x=>{
+        const entry = {
+          id: "z"+Date.now()+Math.floor(Math.random()*1000),
+          repId: repId,
+          site:lastMeta.site, ptype:lastMeta.ptype, date:lastMeta.date, inspector:lastMeta.inspector,
+          tanto:lastMeta.tanto, tantoMail:lastMeta.tantoMail,
+          item:x.item, comment:x.comment, photos:x.photos, cat:x.cat,
+          deadline: dl.toISOString().slice(0,10),
+          status:"未是正", fix:null, approved:null
+        };
+        ledger.push(entry);
+        queuePending(entry); // サーバー送信待ちに登録（送信成功で自動クリア）
+      });
       updateBadge();
     }
     // 確定済み報告書を蓄積（正式報告書の再出力用に全チェック結果も保存）
@@ -1510,7 +1522,29 @@ function copyReport(){
 // ===== 是正管理ワークフロー =====
 function lsGet(k, def){ try{ const v=localStorage.getItem(k); return v?JSON.parse(v):def; }catch(e){ return def; } }
 function lsSet(k, v){ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){} }
-let ledger = lsGet("anpat_ledger", []);
+// 是正台帳はサーバー保管のみ（端末には永続保存しない）。
+// オフライン等で送信できなかった変更分だけを一時保持（anpat_pending）し、電波復帰後に自動再送する。
+let ledger = [];
+let pendingLedger = lsGet("anpat_pending", []);
+pendingLedger.forEach(z=>ledger.push(z)); // 前回送信できなかった分を画面に反映
+try{ localStorage.removeItem("anpat_ledger"); }catch(e){} // 旧バージョンの端末保存分を削除
+let offlineWarned = false;
+function queuePending(entry){
+  const i = pendingLedger.findIndex(x=>x.id===entry.id);
+  if(i>=0) pendingLedger[i] = entry; else pendingLedger.push(entry);
+  lsSet("anpat_pending", pendingLedger);
+}
+function updateOfflineBanner(){
+  const bar = document.getElementById("offbar");
+  if(!bar) return;
+  if(pendingLedger.length){
+    document.getElementById("offbarText").textContent =
+      "是正データ "+pendingLedger.length+" 件がサーバーに送信できていません（オフラインまたは通信エラー）。データは消えません。電波の届く場所に戻ると自動で再送されます。";
+    bar.style.display = "block";
+  } else {
+    bar.style.display = "none";
+  }
+}
 let madeRegistered = false;
 const ROLES = ["班長","リーダー","土木部長","常務","社長","会長"]; // 役職の選択肢
 const DEFAULT_ROUTES = {
@@ -1640,7 +1674,7 @@ function submitFix(id){
   z.fix = {date:new Date().toISOString().slice(0,10), comment:c, photos:ps};
   z.status = "是正報告済";
   delete zPhotoTemp[id];
-  lsSet("anpat_ledger", ledger); renderZesei();
+  queuePending(z); renderZesei();
   // アプリ内通知：安パト者（点検者）へ是正報告
   notify({name:z.inspector}, "是正報告",
     "【是正報告】"+z.site,
@@ -1652,7 +1686,7 @@ function submitFix(id){
 function approveFix(id){
   const z = ledger.find(x=>x.id===id); if(!z) return;
   z.status = "完了"; z.approved = {date:new Date().toISOString().slice(0,10)};
-  lsSet("anpat_ledger", ledger); renderZesei();
+  queuePending(z); renderZesei();
   const rt = routes[z.ptype]||{yakus:["上司"], mail:""};
   const rtRoles = routeRoles(rt).length ? routeRoles(rt) : ["上司"];
   const body = "安全パトロール是正完了報告\n\n"
@@ -1700,14 +1734,18 @@ let syncing = false;
 function syncNow(showResult){
   const url = getSyncUrl();
   if(!url){
-    if(showResult) alert("同期URLが未設定です。設定タブの「自動同期設定」で登録してください。");
-    setSyncStatus("同期：未設定（この端末のみに保存）。設定タブで同期URLを登録すると全員のスマホと自動同期されます。");
+    if(showResult) alert("同期URLが未設定です。設定タブの「自動同期設定」で登録してください。\n※是正データはサーバー保管のため、同期URLの設定が必要です。");
+    setSyncStatus("同期：未設定。是正データはサーバー保管のため、設定タブで同期URLを必ず登録してください。");
+    updateOfflineBanner();
     return;
   }
   if(syncing) return;
   syncing = true;
   setSyncStatus("同期：同期中…");
-  const payload = {ledger, reports:lsGet("anpat_reports",[])};
+  // 是正台帳は未送信分（pending）のみ送信。サーバ側でidごとに統合され、全件が返ってくる。
+  const payload = {ledger: pendingLedger, reports:lsGet("anpat_reports",[])};
+  const sentSnap = {}; // 送信時点の内容を記録（送信中に更新された案件を誤って消さないため）
+  pendingLedger.forEach(z=>{ sentSnap[z.id] = JSON.stringify(z); });
   const adminKey = lsGet("anpat_adminkey","");
   if(adminKey){
     payload.key = adminKey;
@@ -1718,7 +1756,14 @@ function syncNow(showResult){
   fetch(url, {method:"POST", body:JSON.stringify(payload), redirect:"follow"})
     .then(r=>r.json())
     .then(d=>{
-      if(d && d.ledger){ ledger = d.ledger; lsSet("anpat_ledger", ledger); }
+      const hadPending = pendingLedger.length;
+      if(d && d.ledger){ ledger = d.ledger; } // サーバーが正（端末には保存しない）
+      // 送信できた分だけ未送信リストから除去（送信中に更新された案件は残して次回再送）
+      pendingLedger = pendingLedger.filter(z=> sentSnap[z.id] !== JSON.stringify(z));
+      lsSet("anpat_pending", pendingLedger);
+      pendingLedger.forEach(p=>{ const i2 = ledger.findIndex(x=>x.id===p.id); if(i2>=0) ledger[i2]=p; else ledger.push(p); });
+      if(!pendingLedger.length) offlineWarned = false;
+      updateOfflineBanner();
       if(d && d.reports){ lsSet("anpat_reports", d.reports); }
       // 管理者が配信したマスタ・報告先を受信（点検入力中の端末は次回同期時に反映）
       const inProgress = Object.keys(state).some(k=>state[k] && state[k].level);
@@ -1734,12 +1779,20 @@ function syncNow(showResult){
       if(document.getElementById("page-zesei").style.display==="block") renderZesei();
       if(document.getElementById("page-notif").style.display==="block") renderNotif();
       if(document.getElementById("page-bunseki").style.display==="block") renderBunseki();
-      setSyncStatus("同期：完了（"+new Date().toLocaleTimeString()+"）　台帳 "+ledger.length+" 件");
-      if(showResult) alert("同期しました（台帳 "+ledger.length+" 件）");
+      setSyncStatus("同期：完了（"+new Date().toLocaleTimeString()+"）　台帳 "+ledger.length+" 件"
+        + (hadPending? "　※未送信だった "+hadPending+" 件を再送しました" : ""));
+      if(showResult) alert("同期しました（台帳 "+ledger.length+" 件）"
+        + (hadPending? "\n未送信だった是正データ "+hadPending+" 件を再送しました。" : ""));
     })
     .catch(e=>{
-      setSyncStatus("同期：失敗（通信エラー）。電波状況と同期URLを確認してください。データはこの端末に保存されています。");
-      if(showResult) alert("同期に失敗しました。通信状況と同期URLを確認してください。");
+      setSyncStatus("同期：失敗（通信エラー）。未送信の是正データは電波復帰後に自動で再送されます。");
+      updateOfflineBanner();
+      if(pendingLedger.length && !offlineWarned && !showResult){
+        offlineWarned = true; // 同じ警告を繰り返さない（再送成功でリセット）
+        alert("⚠ オフラインのため、是正データ "+pendingLedger.length+" 件をサーバーへ送信できませんでした。\n\nデータは消えません。電波の届く場所に戻ると自動で再送されます。\n（画面下の黄色いバナーの「今すぐ再送」でも送信できます）");
+      }
+      if(showResult) alert("同期に失敗しました。通信状況と同期URLを確認してください。"
+        + (pendingLedger.length? "\n未送信の是正データ "+pendingLedger.length+" 件は、電波復帰後に自動で再送されます。" : ""));
     })
     .finally(()=>{ syncing = false; });
 }
@@ -1907,8 +1960,9 @@ function clearAllData(){
   if(!confirm("この端末に保存されている『報告書・是正案件・通知』をすべて削除します。よろしいですか？\n（マスタ・自分の情報・同期設定は残ります）")) return;
   if(!confirm("削除すると元に戻せません。本当に削除しますか？")) return;
   ledger = [];
-  lsSet("anpat_ledger", []);
+  pendingLedger = []; lsSet("anpat_pending", []);
   lsSet("anpat_reports", []);
+  updateOfflineBanner();
   updateBadge();
   updateNotifBadge();
   if(document.getElementById("page-zesei").style.display==="block") renderZesei();
@@ -1930,7 +1984,8 @@ function adminPurge(){
     .then(d=>{
       if(d && d.purged){
         ledger = [];
-        lsSet("anpat_ledger", []);
+        pendingLedger = []; lsSet("anpat_pending", []);
+        updateOfflineBanner();
         lsSet("anpat_reports", []);
         if(d.purgeTs) lsSet("anpat_purgets", d.purgeTs);
         updateBadge(); updateNotifBadge();
@@ -1976,7 +2031,9 @@ fillTanto();
 render();
 updateBadge();
 updateNotifBadge();
-syncNow(false); // 起動時に自動同期（URL未設定時は何もしない）
+updateOfflineBanner(); // 前回の未送信分があればバナー表示
+syncNow(false); // 起動時に自動同期（是正台帳はサーバーから取得）
+window.addEventListener("online", ()=>syncNow(false)); // 電波復帰で自動再送
 
 // PWA：https配信時のみオフライン用サービスワーカーを登録（単体ファイル利用時は無害に無視）
 if("serviceWorker" in navigator && location.protocol==="https:"){
