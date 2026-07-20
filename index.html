@@ -317,12 +317,13 @@
 <div id="page-config" style="display:none">
   <div class="card">
     <h2>自分の情報（通知の宛先照合用）</h2>
-    <label>氏名（点検者名・現場担当者名と同じ表記にしてください）</label>
-    <input type="text" id="me_name" placeholder="例）山田太郎">
+    <div style="display:flex; gap:10px;">
+      <div style="flex:1;"><label>姓</label><input type="text" id="me_sei" placeholder="例）山田"></div>
+      <div style="flex:1;"><label>名</label><input type="text" id="me_mei" placeholder="例）太郎"></div>
+    </div>
+    <div class="note">※点検者名・現場担当者名と同じ表記にしてください（姓と名の間のスペースの有無は問いません）</div>
     <label>役職（上司として報告を受ける方のみ選択。一般の方は「なし」のまま）</label>
     <select id="me_yaku"></select>
-    <label>メールアドレス（任意・メール併用する場合）</label>
-    <input type="text" id="me_mail" placeholder="例）yamada@example.co.jp">
     <div class="actions"><button class="a-copy" onclick="saveMe()">自分の情報を保存</button></div>
   </div>
   <div class="card">
@@ -352,7 +353,7 @@
 
     <details><summary style="font-weight:bold; color:var(--navy); padding:8px 0; cursor:pointer;">🔰 最初にやること（全員・1回だけ）</summary>
       <div style="padding:4px 0 8px;">
-      ① 「設定」タブ →「自分の情報」に<b>氏名</b>を入力して保存（通知の宛先になります。上司の方は役職も）<br>
+      ① 「設定」タブ →「自分の情報」に<b>姓・名</b>を入力して保存（通知の宛先になります。上司の方は役職も）<br>
       ② 「設定」タブ →「自動同期設定」に会社から案内された<b>同期URL</b>を貼り付けて保存<br>
       ③ 画面上部の同期表示が「同期：完了」になれば準備OK（以後は1分ごとに自動同期）
       </div>
@@ -412,7 +413,7 @@
       <div style="padding:4px 0 8px;">
       <b>同期に失敗する：</b>電波状況を確認→設定タブの同期URLが正しいか（末尾が /exec）を確認。同期は1分ごとに自動で行われ、画面上部の「同期：…」表示をタップすると手動でも同期できます<br>
       <b>「未送信の是正データがあります」と出た：</b>圏外などでサーバーに送れなかった状態です。データは消えません。電波の届く場所に戻ると自動で再送されます（バナーの「今すぐ再送」でも送信可）。是正データはサーバー保管のため、<b>再送が終わるまでアプリを消さない</b>でください<br>
-      <b>通知が届かない：</b>設定タブ「自分の情報」の氏名が、点検入力で書かれた名前（点検者名・現場担当者名）と一致しているか確認<br>
+      <b>通知が届かない：</b>設定タブ「自分の情報」の姓・名が、点検入力で書かれた名前（点検者名・現場担当者名）と一致しているか確認（姓と名の間のスペースの有無は問いません）<br>
       <b>アプリの更新が反映されない：</b>アプリを一度完全に閉じて開き直す<br>
       <b>ホーム画面に追加したい：</b>AndroidはChromeメニュー→「アプリをインストール」、iPhone/iPadはSafariの共有→「ホーム画面に追加」
       </div>
@@ -1182,16 +1183,26 @@ ${body}<script>setTimeout(function(){window.print();},500);<\/script></body></ht
 }
 
 // ===== アプリ内通知 =====
-function getMe(){ return lsGet("anpat_me", {name:"", yaku:"", mail:""}); }
+function getMe(){ return lsGet("anpat_me", {name:"", sei:"", mei:"", yaku:""}); }
+// 氏名の一致判定（姓と名の間のスペース有無・全角半角スペースを無視して比較）
+function nameEq(a, b){
+  const n = s=>String(s||"").replace(/[\s　]+/g,"");
+  return n(a)!=="" && n(a)===n(b);
+}
+// 既読記録用のキー（スペースを除いた氏名）
+function meKey(){ return String(getMe().name||"").replace(/[\s　]+/g,"") || "me"; }
 function saveMe(){
+  const sei = document.getElementById("me_sei").value.trim();
+  const mei = document.getElementById("me_mei").value.trim();
   const me = {
-    name: document.getElementById("me_name").value.trim(),
-    yaku: document.getElementById("me_yaku").value.trim(),
-    mail: document.getElementById("me_mail").value.trim()
+    sei: sei,
+    mei: mei,
+    name: sei + mei, // 照合・表示用（姓＋名）
+    yaku: document.getElementById("me_yaku").value.trim()
   };
   lsSet("anpat_me", me);
   updateNotifBadge();
-  alert("自分の情報を保存しました。氏名・役職に一致する通知が「通知」タブに届きます。");
+  alert("自分の情報を保存しました。姓名・役職に一致する通知が「通知」タブに届きます。");
 }
 function allStore(){ return lsGet("anpat_reports", []); }
 function notifList(){ return allStore().filter(r=>r.kind==="notif"); }
@@ -1209,14 +1220,14 @@ function notify(to, type, title, body, zid){
 function isMine(n){
   const me = getMe();
   if(!n.to) return false;
-  if(n.to.name && me.name && n.to.name===me.name) return true;
+  if(n.to.name && nameEq(n.to.name, me.name)) return true; // スペース有無を無視して照合
   if(n.to.role && me.yaku && n.to.role===me.yaku) return true;
   if(n.to.roles && me.yaku && n.to.roles.indexOf(me.yaku)>=0) return true; // 複数役職宛て
   return false;
 }
 function updateNotifBadge(){
   const me = getMe();
-  const key = me.name || "me";
+  const key = meKey();
   const n = notifList().filter(x=>isMine(x) && !(x.read && x.read[key])).length;
   const b = document.getElementById("nbadge");
   if(b){ b.textContent = n; b.style.display = n? "" : "none"; }
@@ -1225,13 +1236,13 @@ const NTYPE_COLOR = {"是正依頼":"s-open","是正報告":"s-fixed","安パト
 function renderNotif(){
   updateNotifBadge();
   const me = getMe();
-  const key = me.name || "me";
+  const key = meKey();
   const mode = document.getElementById("nfilter").value;
   const wrap = document.getElementById("nlist");
   let list = notifList().slice().sort((a,b)=>(b.ts||0)-(a.ts||0));
   if(mode==="mine"){
     if(!me.name && !me.yaku){
-      wrap.innerHTML = '<div class="note">設定タブの「自分の情報」で氏名（と役職）を保存すると、自分宛ての通知が表示されます。</div>';
+      wrap.innerHTML = '<div class="note">設定タブの「自分の情報」で姓・名（と役職）を保存すると、自分宛ての通知が表示されます。</div>';
       return;
     }
     list = list.filter(isMine);
@@ -1289,7 +1300,7 @@ function closeNotif(){
 }
 function markRead(id){
   const me = getMe();
-  const key = me.name || "me";
+  const key = meKey();
   const store = allStore();
   const n = store.find(x=>x.id===id);
   if(n){ n.read = n.read || {}; n.read[key] = true; lsSet("anpat_reports", store); }
@@ -1921,14 +1932,20 @@ function saveRoutes(){
 // ===== マスタ設定エディタ =====
 function renderConfig(){
   const me = getMe();
-  document.getElementById("me_name").value = me.name||"";
+  // 姓・名（旧バージョンで氏名のみ保存済みの場合はスペースで分割して引き継ぐ）
+  let sei = me.sei||"", mei = me.mei||"";
+  if(!sei && !mei && me.name){
+    const parts = String(me.name).trim().split(/[\s　]+/);
+    sei = parts[0]||""; mei = parts.slice(1).join("");
+  }
+  document.getElementById("me_sei").value = sei;
+  document.getElementById("me_mei").value = mei;
   // 役職プルダウンをマスタの役職リストから生成（保存済みの役職がリスト外でも保持）
   const opts = rolesList().slice();
   if(me.yaku && !opts.includes(me.yaku)) opts.push(me.yaku);
   document.getElementById("me_yaku").innerHTML =
     '<option value="">なし（一般）</option>' + opts.map(r=>`<option>${r}</option>`).join("");
   document.getElementById("me_yaku").value = me.yaku||"";
-  document.getElementById("me_mail").value = me.mail||"";
   document.getElementById("syncUrl").value = getSyncUrl();
   document.getElementById("adminKey").value = lsGet("anpat_adminkey","");
 }
