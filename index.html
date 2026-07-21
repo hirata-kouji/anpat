@@ -1789,9 +1789,10 @@ function approveFixRep(gi){
 // ===== 自動同期（Google Apps Script 同期サーバ） =====
 // 会社の同期サーバURLはアプリに標準組み込み（各端末での貼り付け設定は不要）
 const DEFAULT_SYNC_URL = "https://script.google.com/macros/s/AKfycbx3-m60VUs0OKAK8wO7Vgm90eiVCUYrjHWRNIN8byPidfRcXvfLuEcxHYA6_ghFYphd/exec";
-function getSyncUrl(){ return lsGet("anpat_syncurl", "") || DEFAULT_SYNC_URL; }
+// 保存URLに空白・改行が紛れ込んでいても除去して使う（貼り付けミス対策）
+function getSyncUrl(){ return (lsGet("anpat_syncurl", "") || DEFAULT_SYNC_URL).replace(/[\s　]+/g, ""); }
 function saveSyncUrl(){
-  const u = document.getElementById("syncUrl").value.trim();
+  const u = document.getElementById("syncUrl").value.replace(/[\s　]+/g, "");
   const k = document.getElementById("adminKey").value.trim();
   lsSet("anpat_syncurl", u === DEFAULT_SYNC_URL ? "" : u); // 標準URLのままなら保存不要
   lsSet("anpat_adminkey", k);
