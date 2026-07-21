@@ -328,9 +328,9 @@
   </div>
   <div class="card">
     <h2>自動同期設定（全員で是正台帳を共有）</h2>
-    <div class="note" style="margin-bottom:6px;">会社のGoogleアカウントで無料の同期サーバ（Google Apps Script）を1つ作成し、そのURLを登録すると、是正台帳と集計データが全員のスマホと自動で同期されます（報告書確定・是正報告・承認のたびに送受信）。作成手順は配布資料「同期サーバ設定手順」を参照してください。</div>
-    <label>同期URL（https://script.google.com/macros/s/…/exec）</label>
-    <input type="text" id="syncUrl" placeholder="未設定の場合はこの端末のみに保存されます">
+    <div class="note" style="margin-bottom:6px;">会社の同期サーバのURLは<b>アプリに標準で組み込み済み</b>です。設定は不要で、インストール直後から全員のスマホと自動同期されます。同期サーバを変更した場合のみ、管理者の案内に従って下のURLを貼り替えてください。</div>
+    <label>同期URL（標準設定済み・通常は変更不要）</label>
+    <input type="text" id="syncUrl" placeholder="標準の同期サーバを使用します">
     <label>管理者キー（管理者のみ入力。マスタ・報告先を変更して全端末へ配信できます）</label>
     <input type="text" id="adminKey" placeholder="一般の方は空欄のまま">
     <div class="actions"><button class="a-copy" onclick="saveSyncUrl()">同期設定を保存</button></div>
@@ -354,8 +354,7 @@
     <details><summary style="font-weight:bold; color:var(--navy); padding:8px 0; cursor:pointer;">🔰 最初にやること（全員・1回だけ）</summary>
       <div style="padding:4px 0 8px;">
       ① 「設定」タブ →「自分の情報」に<b>姓・名</b>を入力して保存（通知の宛先になります。上司の方は役職も）<br>
-      ② 「設定」タブ →「自動同期設定」に会社から案内された<b>同期URL</b>を貼り付けて保存<br>
-      ③ 画面上部の同期表示が「同期：完了」になれば準備OK（以後は1分ごとに自動同期）
+      ② 画面上部の同期表示が「同期：完了」になっていれば準備OK（同期サーバは組み込み済み・以後は1分ごとに自動同期）
       </div>
     </details>
 
@@ -1788,17 +1787,20 @@ function approveFixRep(gi){
 }
 
 // ===== 自動同期（Google Apps Script 同期サーバ） =====
-function getSyncUrl(){ return lsGet("anpat_syncurl", ""); }
+// 会社の同期サーバURLはアプリに標準組み込み（各端末での貼り付け設定は不要）
+const DEFAULT_SYNC_URL = "https://script.google.com/macros/s/AKfycbx3-m60VUs0OKAK8wO7Vgm90eiVCUYrjHWRNIN8byPidfRcXvfLuEcxHYA6_ghFYphd/exec";
+function getSyncUrl(){ return lsGet("anpat_syncurl", "") || DEFAULT_SYNC_URL; }
 function saveSyncUrl(){
   const u = document.getElementById("syncUrl").value.trim();
   const k = document.getElementById("adminKey").value.trim();
-  lsSet("anpat_syncurl", u);
+  lsSet("anpat_syncurl", u === DEFAULT_SYNC_URL ? "" : u); // 標準URLのままなら保存不要
   lsSet("anpat_adminkey", k);
   renderConfig();
-  alert(u? "同期設定を保存しました。以後、報告書の確定・是正報告・承認のたびに自動同期されます。"
-        + (k? "\n管理者キーを設定しました。マスタ・報告先の編集と全端末への配信ができます。" : "")
-      : "同期URLを削除しました（この端末のみに保存されます）。");
-  if(u) syncNow(true);
+  alert((u && u !== DEFAULT_SYNC_URL
+        ? "同期URLを変更して保存しました。"
+        : "標準の同期サーバ（組み込み済み）を使用します。")
+      + (k? "\n管理者キーを設定しました。マスタ・報告先の編集と全端末への配信ができます。" : ""));
+  syncNow(true);
 }
 function setSyncStatus(t){
   const b = document.getElementById("bn_sync"); if(b) b.textContent = t.replace(/^同期：/, "サーバー連動：");
