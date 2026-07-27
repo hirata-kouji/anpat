@@ -336,6 +336,12 @@
     <div class="actions"><button class="a-copy" onclick="saveSyncUrl()">同期設定を保存</button></div>
   </div>
   <div class="card">
+    <h2>端末通知（スマホの通知欄に表示）</h2>
+    <div class="note" style="margin-bottom:6px;">有効にすると、新しい通知（是正依頼・是正報告・完了報告など）が届いたとき、スマホの通知欄にも表示され、アプリアイコンに未読数バッジが付きます（対応端末のみ）。<br>※アプリを完全に終了している間は表示されません（次にアプリが動いた時にまとめて表示）。<br>※iPhone/iPadは、ホーム画面に追加したアプリから開いて有効化してください（iOS 16.4以上）。</div>
+    <div class="actions"><button class="a-copy" onclick="enableDeviceNotif()">📳 端末通知を有効にする</button></div>
+    <div class="note" id="dnStatus"></div>
+  </div>
+  <div class="card">
     <h2>管理者メニュー</h2>
     <div class="note" style="margin-bottom:6px;">チェック項目・工事名・報告先の変更、データの初期化は管理者専用ページで行います（上の「自動同期設定」で管理者キーの入力が必要です）。</div>
     <div class="actions"><button class="a-copy" onclick="openAdmin()">🔒 管理者ページを開く</button></div>
@@ -1230,6 +1236,54 @@ function updateNotifBadge(){
   const n = notifList().filter(x=>isMine(x) && !(x.read && x.read[key])).length;
   const b = document.getElementById("nbadge");
   if(b){ b.textContent = n; b.style.display = n? "" : "none"; }
+  // アプリアイコンにも未読数バッジ（対応端末のみ：Android/PC の Chrome・Edge）
+  try{
+    if("setAppBadge" in navigator){ n ? navigator.setAppBadge(n) : navigator.clearAppBadge(); }
+  }catch(e){}
+}
+
+// ===== 端末通知（スマホの通知欄に表示） =====
+function deviceNotifState(){
+  if(!("Notification" in window)) return "unsupported";
+  return Notification.permission; // "granted" / "denied" / "default"
+}
+async function enableDeviceNotif(){
+  if(!("Notification" in window)){
+    alert("この端末・ブラウザは通知に対応していません。\n※iPhone/iPadは、ホーム画面に追加したアプリから開くと有効化できます（iOS 16.4以上）。");
+    return;
+  }
+  const p = await Notification.requestPermission();
+  if(p === "granted"){
+    alert("端末通知を有効にしました。新しい通知が届くと、スマホの通知欄にも表示されます。\n※アプリを完全に終了している間は表示されません（次にアプリが動いた時にまとめて表示されます）。");
+    notifyDevice();
+  } else {
+    alert("通知が許可されませんでした。端末の設定（アプリの通知）からも変更できます。");
+  }
+  renderConfig();
+  if(document.getElementById("page-notif").style.display==="block") renderNotif();
+}
+// 同期で新しく届いた自分宛て未読を、端末の通知欄に表示（重複表示はしない）
+function notifyDevice(){
+  try{
+    if(deviceNotifState() !== "granted") return;
+    const me = getMe();
+    if(!me.name && !me.yaku) return;
+    const key = meKey();
+    const seen = lsGet("anpat_notified", []);
+    const fresh = notifList().filter(n => isMine(n) && !(n.read && n.read[key]) && seen.indexOf(n.id) < 0);
+    if(!fresh.length) return;
+    const show = (title, body, tag) => {
+      const opt = {body: body, icon: "icon-192.png", badge: "icon-192.png", tag: tag};
+      if(navigator.serviceWorker && navigator.serviceWorker.controller){
+        navigator.serviceWorker.ready.then(reg => reg.showNotification(title, opt)).catch(()=>{ try{ new Notification(title, opt); }catch(e){} });
+      } else {
+        try{ new Notification(title, opt); }catch(e){}
+      }
+    };
+    fresh.slice(-3).forEach(n => show(n.title || "安全パトロール通知", String(n.body||"").slice(0,120), n.id));
+    if(fresh.length > 3) show("安全パトロール", "ほか " + (fresh.length-3) + " 件の未読通知があります", "anpat-more");
+    lsSet("anpat_notified", seen.concat(fresh.map(n=>n.id)).slice(-300));
+  }catch(e){}
 }
 const NTYPE_COLOR = {"是正依頼":"s-open","是正報告":"s-fixed","安パト報告":"s-fixed","是正完了":"s-done","是正完了報告":"s-done"};
 function renderNotif(){
@@ -1246,12 +1300,24 @@ function renderNotif(){
     }
     list = list.filter(isMine);
   }
-  if(!list.length){ wrap.innerHTML = '<div class="note">通知はありません。</div>'; return; }
+  if(!list.length){
+    wrap.innerHTML = (deviceNotifState()==="default"
+      ? '<div onclick="enableDeviceNotif()" style="background:#eef4ff; border:1.5px solid #cfe0f5; border-radius:10px; padding:10px 12px; margin-bottom:10px; cursor:pointer;"><b style="font-size:13px; color:var(--blue);">📳 スマホの通知欄にも表示できます</b><div style="font-size:12px; color:#555; margin-top:2px;">タップして端末通知を有効にすると、新しい通知が届いたとき通知欄でお知らせします。</div></div>'
+      : '') + '<div class="note">通知はありません。</div>';
+    return;
+  }
   const esc = s=>String(s==null?"":s).replace(/&/g,"&amp;").replace(/</g,"&lt;");
   const isUnread = n => isMine(n) && !(n.read && n.read[key]);
   const unreadL = list.filter(isUnread);
   const readL = list.filter(n=>!isUnread(n));
   let h = "";
+  // 端末通知が未許可なら案内バナー（1タップで有効化）
+  if(deviceNotifState() === "default"){
+    h += `<div onclick="enableDeviceNotif()" style="background:#eef4ff; border:1.5px solid #cfe0f5; border-radius:10px; padding:10px 12px; margin-bottom:10px; cursor:pointer;">
+      <b style="font-size:13px; color:var(--blue);">📳 スマホの通知欄にも表示できます</b>
+      <div style="font-size:12px; color:#555; margin-top:2px;">タップして端末通知を有効にすると、新しい通知が届いたとき通知欄でお知らせします。</div>
+    </div>`;
+  }
   // 未読：これまでどおりのカード表示（メールの未読のイメージ）
   h += `<div style="font-size:12px; font-weight:bold; color:var(--ng); margin:4px 0;">📬 未読 ${unreadL.length} 件</div>`;
   h += unreadL.length ? unreadL.map(n=>{
@@ -1864,6 +1930,7 @@ function syncNow(showResult){
       }
       updateBadge();
       updateNotifBadge();
+      notifyDevice(); // 新着の自分宛て通知を端末の通知欄にも表示
       if(document.getElementById("page-zesei").style.display==="block") renderZesei();
       if(document.getElementById("page-notif").style.display==="block") renderNotif();
       if(document.getElementById("page-bunseki").style.display==="block") renderBunseki();
@@ -1951,6 +2018,15 @@ function renderConfig(){
   document.getElementById("me_yaku").value = me.yaku||"";
   document.getElementById("syncUrl").value = getSyncUrl();
   document.getElementById("adminKey").value = lsGet("anpat_adminkey","");
+  // 端末通知の状態表示
+  const dn = document.getElementById("dnStatus");
+  if(dn){
+    const s = deviceNotifState();
+    dn.textContent = s==="granted" ? "状態：有効（新着をスマホの通知欄に表示します）"
+      : s==="denied" ? "状態：ブロック中（端末の設定 → アプリの通知 から許可に変更してください）"
+      : s==="default" ? "状態：未設定（上のボタンで有効にできます）"
+      : "状態：この端末・ブラウザは非対応です";
+  }
 }
 // 管理者ページの描画
 function renderAdmin(){

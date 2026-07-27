@@ -8,6 +8,16 @@ self.addEventListener("activate", e => {
   e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k !== C).map(k => caches.delete(k)))));
   self.clients.claim();
 });
+// 端末通知をタップしたらアプリを前面に（なければ起動）
+self.addEventListener("notificationclick", e => {
+  e.notification.close();
+  e.waitUntil(
+    clients.matchAll({ type: "window", includeUncontrolled: true }).then(list => {
+      for (const c of list) { if ("focus" in c) return c.focus(); }
+      return clients.openWindow("./");
+    })
+  );
+});
 self.addEventListener("fetch", e => {
   if (e.request.method !== "GET") return; // 同期のPOST等はそのまま通す
   const isDoc = e.request.mode === "navigate" || e.request.destination === "document";
