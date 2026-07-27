@@ -381,7 +381,7 @@
       ① 「通知」タブに届いた【是正依頼】を確認（未読は赤バッジ）<br>
       ② 「是正管理」タブ → 立場を「<b>被点検者（是正報告）</b>」に切り替え<br>
       ③ 報告書ごとにまとまって表示されます。各指摘に是正内容を記入し、是正後の写真を撮影<br>
-      ④ 「<b>この報告書の是正をまとめて報告する</b>」を1回タップ → 全指摘が一括で報告され、安パト者へ通知は1通です。承認されると【是正完了】の通知が届きます
+      ④ 「<b>この報告書の是正をまとめて報告する</b>」を1回タップ → 全指摘が一括で報告され、安パト者と上司へ自動通知されます。承認されると【是正完了】の通知が届きます
       </div>
     </details>
 
@@ -1810,14 +1810,21 @@ function submitFixRep(gi){
   });
   renderZesei();
   const z0 = items[0];
+  const fixBody = "報告書："+z0.date+"　"+z0.ptype+"\n是正日："+d+"\n\n"
+      + items.map((z,i)=>"("+(i+1)+") "+z.item+(z.fix.comment?("\n　是正内容："+z.fix.comment):"")).join("\n");
+  // 点検者（安パト者）へ：承認依頼
   notify({name:z0.inspector}, "是正報告",
     "【是正報告】"+z0.site+"（"+items.length+"件）",
-    "報告書："+z0.date+"　"+z0.ptype+"\n是正日："+d+"\n\n"
-      + items.map((z,i)=>"("+(i+1)+") "+z.item+(z.fix.comment?("\n　是正内容："+z.fix.comment):"")).join("\n")
-      + "\n\n（是正後の写真は「是正管理」で確認し、まとめて承認してください）",
+    fixBody + "\n\n（是正後の写真は「是正管理」で確認し、まとめて承認してください）",
+    z0.repId||z0.id);
+  // 上司（報告先役職）へも：是正報告があったことを承認前に共有
+  const rtRolesS = routeRoles(routes[z0.ptype]);
+  notify({roles: rtRolesS.length ? rtRolesS : ["上司"]}, "是正報告",
+    "【是正報告】"+z0.site+"（"+items.length+"件・承認待ち）",
+    fixBody + "\n\n（担当 "+(z0.tanto||"")+" から是正報告がありました。点検者 "+z0.inspector+" の承認待ちです）",
     z0.repId||z0.id);
   syncNow(false);
-  alert("是正報告を送信しました（"+items.length+"件まとめて）。点検者の承認をお待ちください。");
+  alert("是正報告を送信しました（"+items.length+"件まとめて）。点検者と上司へ通知しました。点検者の承認をお待ちください。");
 }
 
 // 報告書単位の承認：是正報告済の指摘をまとめて完了にし、上司・担当者へ通知は1通ずつ
