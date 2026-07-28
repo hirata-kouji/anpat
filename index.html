@@ -79,21 +79,88 @@
   .pwrap{position:relative; display:inline-block; margin:6px 6px 0 0;}
   .pwrap img{margin:0;}
   .pdel{position:absolute; top:-6px; right:-6px; background:var(--ng); color:#fff; border:2px solid #fff; border-radius:50%; width:22px; height:22px; font-size:12px; font-weight:bold; line-height:1; padding:0;}
+
+  /* ===== UIリニューアル（デザイン改善版） ===== */
+  header{padding-bottom:0;}
+  header h1{display:flex; align-items:center; gap:8px; font-size:17px;}
+  #syncbar::before{content:"● "; color:#7ee2a0;}
+  #syncbar.err::before{color:#ff9e9e;}
+  .tabs{background:#fff; margin:12px -16px 0; padding:2px 2px 0; gap:0; border-bottom:1px solid var(--line);}
+  .tab{display:flex; flex-direction:column; align-items:center; gap:3px; padding:9px 0 7px; background:none; color:#5a6472; font-size:11.5px; border-radius:0; border-bottom:3px solid transparent; position:relative;}
+  .tab svg{width:22px; height:22px;}
+  .tab.active{background:none; color:var(--blue); border-bottom-color:var(--blue);}
+  .tab .zbadge{position:absolute; top:1px; left:calc(50% + 6px); border:2px solid #fff;}
+  label{font-weight:bold; color:#222; font-size:13px;}
+  select,input[type=text],input[type=date],textarea{border-color:#d5dbe7; border-radius:10px; padding:12px;}
+  select:focus,input[type=text]:focus,input[type=date]:focus,textarea:focus{outline:2px solid var(--blue); outline-offset:-1px;}
+  .req,.opt{display:inline-block; font-size:10px; font-weight:bold; color:#fff; padding:2px 8px; border-radius:6px; margin-left:6px; vertical-align:1px;}
+  .req{background:var(--ng);}
+  .opt{background:#8a94a3;}
+  .btns button{position:relative; border-radius:10px; padding:12px 0;}
+  .btns button::before{content:""; display:inline-block; width:10px; height:10px; border-radius:50%; margin-right:5px; vertical-align:-1px; background:#b0b8c4;}
+  .btns button:nth-child(1){border-color:var(--ok); color:#1b5e20;}
+  .btns button:nth-child(1)::before{background:var(--ok);}
+  .btns button:nth-child(2){border-color:var(--warn); color:#a34700;}
+  .btns button:nth-child(2)::before{background:var(--warn);}
+  .btns button:nth-child(3){border-color:var(--ng); color:#8e1b1b;}
+  .btns button:nth-child(3)::before{background:var(--ng);}
+  .btns button:nth-child(4){border-color:#78909c; color:#4c5a63;}
+  .btns button:nth-child(4)::before{background:#78909c;}
+  .btns button.sel-ok{background:var(--ok); border-color:var(--ok); color:#fff;}
+  .btns button.sel-warn{background:var(--warn); border-color:var(--warn); color:#fff;}
+  .btns button.sel-ng{background:var(--ng); border-color:var(--ng); color:#fff;}
+  .btns button.sel-na{background:#78909c; border-color:#78909c; color:#fff;}
+  .btns button.sel-ok::before,.btns button.sel-warn::before,.btns button.sel-ng::before,.btns button.sel-na::before{background:#fff;}
+  .chip{padding:4px 12px; border-radius:8px;}
+  .s-open{background:var(--ng); color:#fff;}
+  .s-fixed{background:var(--warn); color:#fff;}
+  .s-done{background:var(--ok); color:#fff;}
+  .card,.zcard{border-radius:14px; border-color:#e3e8f2;}
+  .ncirc{display:inline-flex; align-items:center; justify-content:center; width:20px; height:20px; border-radius:50%; color:#fff; font-size:12px; font-weight:bold; margin-right:2px; vertical-align:-3px;}
+  .nc-ng{background:var(--ng);}
+  .nc-warn{background:var(--warn);}
+  .zbtn{border-radius:12px; padding:14px 0; font-size:15px;}
+  .actions button,.actions a{border-radius:12px;}
+  .progress{padding:12px 14px;}
+  .progress .counts,.counts{font-weight:bold; color:var(--blue); font-size:15px;}
+  .progress button{border-radius:12px; padding:12px 22px; font-size:15px; background:var(--blue);}
+  .progress button:disabled{background:#aab4c8;}
+  button:active{filter:brightness(.88);}
 </style>
 </head>
 <body>
 <header>
-  <h1>㈱中西組 安全パトロールアプリ</h1>
+  <h1>
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><path d="M12 2l8 3v6c0 4.8-3.2 8.4-8 11-4.8-2.6-8-6.2-8-11V5z"/><path d="M8.2 13.5a3.9 3.9 0 0 1 7.6 0"/><path d="M12 8.7v2"/><path d="M7.5 13.5h9"/></svg>
+    ㈱中西組 安全パトロールアプリ
+  </h1>
   <div class="sub" style="display:flex; justify-content:space-between; align-items:center;">
     <span id="syncbar" onclick="syncNow(true)" style="cursor:pointer; font-size:11px; opacity:.92;">同期：確認中…</span>
     <button onclick="openHelp()" style="background:rgba(255,255,255,.2); color:#fff; border:none; border-radius:12px; padding:3px 12px; font-size:12px; font-weight:bold; white-space:nowrap;">❓ 使い方</button>
   </div>
   <nav class="tabs">
-    <button class="tab active" id="tab-input" onclick="showPage('input')">点検入力</button>
-    <button class="tab" id="tab-zesei" onclick="showPage('zesei')">是正管理 <span class="zbadge" id="zbadge" style="display:none">0</span></button>
-    <button class="tab" id="tab-notif" onclick="showPage('notif')">通知 <span class="zbadge" id="nbadge" style="display:none">0</span></button>
-    <button class="tab" id="tab-bunseki" onclick="showPage('bunseki')">集計</button>
-    <button class="tab" id="tab-config" onclick="showPage('config')">設定</button>
+    <button class="tab active" id="tab-input" onclick="showPage('input')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 4V2.5h6V4"/><path d="M9 12l2 2 4-4"/><path d="M9 17h6"/></svg>
+      <span>点検入力</span>
+    </button>
+    <button class="tab" id="tab-zesei" onclick="showPage('zesei')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a4.5 4.5 0 0 0-6.4 6.4L3 18l3 3 5.3-5.3a4.5 4.5 0 0 0 6.4-6.4l-3.1 3.1-3-3z"/></svg>
+      <span>是正管理</span>
+      <span class="zbadge" id="zbadge" style="display:none">0</span>
+    </button>
+    <button class="tab" id="tab-notif" onclick="showPage('notif')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 9a6 6 0 1 0-12 0c0 6-2 7-2 7h16s-2-1-2-7"/><path d="M10.5 20a2 2 0 0 0 3 0"/></svg>
+      <span>通知</span>
+      <span class="zbadge" id="nbadge" style="display:none">0</span>
+    </button>
+    <button class="tab" id="tab-bunseki" onclick="showPage('bunseki')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="20" x2="5" y2="14"/><line x1="12" y1="20" x2="12" y2="9"/><line x1="19" y1="20" x2="19" y2="4"/><line x1="3" y1="20" x2="21" y2="20"/></svg>
+      <span>集計</span>
+    </button>
+    <button class="tab" id="tab-config" onclick="showPage('config')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+      <span>設定</span>
+    </button>
   </nav>
 </header>
 
@@ -130,13 +197,13 @@
     <select id="ptype"></select>
     <label>工種（重点モジュール）</label>
     <select id="wtype" onchange="render()"></select>
-    <label>点検者名（氏名のみ・所属や肩書は書かないでください）</label>
+    <label>点検者名（氏名のみ・所属や肩書は書かない）<span class="req">必須</span></label>
     <input type="text" id="inspector" placeholder="例）山田太郎">
-    <label>現場担当者名（被点検者・氏名のみ）</label>
+    <label>現場担当者名（被点検者・氏名のみ）<span class="req">必須</span></label>
     <input type="text" id="tanto" placeholder="例）佐藤花子">
-    <label>担当者メールアドレス（是正依頼の通知先・工事ごとに記憶されます）</label>
+    <label>担当者メールアドレス（工事ごとに記憶されます）<span class="opt">任意</span></label>
     <input type="text" id="tantoMail" placeholder="例）genba@example.co.jp">
-    <label>点検日</label>
+    <label>点検日<span class="req">必須</span></label>
     <input type="date" id="pdate">
   </div>
 
@@ -1766,7 +1833,7 @@ function renderZesei(){
         ? '<span style="color:var(--ng); font-size:12px; font-weight:bold;">未是正</span>'
         : '<span style="color:var(--warn); font-size:12px; font-weight:bold;">是正報告済</span>';
       let ih = `<div style="border-top:1px dashed var(--line); margin-top:8px; padding-top:8px;">
-        <div style="font-size:13px; font-weight:bold; line-height:1.5;">(${i+1}) ${z.item}　${st}</div>
+        <div style="font-size:14px; font-weight:bold; line-height:1.5;"><span class="ncirc ${z.status==="未是正" ? "nc-ng" : "nc-warn"}">${i+1}</span> ${z.item}　${st}</div>
         ${z.comment?`<div style="font-size:13px;">→ ${z.comment}</div>`:""}
         ${photoRow(z.photos)}`;
       if(z.fix){
@@ -1878,9 +1945,12 @@ function saveSyncUrl(){
 }
 function setSyncStatus(t){
   const b = document.getElementById("bn_sync"); if(b) b.textContent = t.replace(/^同期：/, "サーバー連動：");
-  // ヘッダー（タブバーの外側）に常時表示する短縮版
+  // ヘッダー（タブバーの外側）に常時表示する短縮版（●の色で正常/異常を表示）
   const sb = document.getElementById("syncbar");
-  if(sb) sb.textContent = t.replace(/。[\s\S]*$/, "").replace(/　.*$/, "");
+  if(sb){
+    sb.textContent = t.replace(/。[\s\S]*$/, "").replace(/　.*$/, "");
+    sb.classList.toggle("err", /失敗|未設定|エラー/.test(t));
+  }
 }
 let syncing = false;
 function syncNow(showResult){
