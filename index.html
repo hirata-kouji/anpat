@@ -352,8 +352,9 @@
     <h2>マスタ設定（工事名・種別・チェック項目）</h2>
     <div class="note" id="adminNote" style="display:none;color:#c62828;margin-bottom:6px;">マスタは管理者のみ変更できます。下の「自動同期設定」に管理者キーを入力すると編集でき、保存すると同期で全端末に配信されます。</div>
     <div class="note" style="margin-bottom:6px;">1行に1件で入力してください。「マスタを保存」で点検入力に即反映され、同期により全端末へ配信されます（各端末の入力中の点検はリセットされます）。</div>
-    <label>工事名リスト</label>
-    <textarea id="ms_sites" style="min-height:130px"></textarea>
+    <label>工事名リスト（発注者名を登録する場合は「工事名｜発注者名」のように縦棒で区切って1行に）</label>
+    <textarea id="ms_sites" style="min-height:130px" placeholder="例）○○地区汚水管改築工事｜神戸市建設局"></textarea>
+    <div class="note" style="margin-top:-4px;">※発注者名を登録すると、役所・発注者提出用の正式報告書の宛先「○○ 御中」に自動印字されます。未登録の工事は空欄（手書き用の下線）になります。</div>
     <label>パトロール種別リスト（追加すると下の「報告先設定」に自動で行が増えます）</label>
     <textarea id="ms_ptypes" style="min-height:100px" oninput="onPtypesInput()"></textarea>
     <label>役職リスト（1行1件。「自分の情報」の役職選択と報告先設定に連動します）</label>
@@ -469,7 +470,7 @@
     <details><summary style="font-weight:bold; color:var(--navy); padding:8px 0; cursor:pointer;">📄 報告書を出す・保存する</summary>
       <div style="padding:4px 0 8px;">
       <b>確定直後：</b>「共有（写真付き）」でLINE・メール等へ／「PDF保存（印刷）」で端末に保存<br>
-      <b>正式報告書：</b>「是正管理」タブ →「正式報告書の出力」で報告書と様式（<b>社内様式</b>／<b>役所・発注者提出用</b>）を選んで出力。チェック項目一覧・指摘写真・是正報告・完了確認・押印欄まで入った正式様式です（是正完了後に出力すると完成版になります）。発注者提出用は宛先・提出日・監督員確認欄付きです<br>
+      <b>正式報告書：</b>「是正管理」タブ →「正式報告書の出力」で報告書と様式（<b>社内様式</b>／<b>役所・発注者提出用</b>）を選んで出力。チェック項目一覧・指摘写真・是正報告・完了確認・押印欄まで入った正式様式です（是正完了後に出力すると完成版になります）。発注者提出用は宛先・提出日・監督員確認欄付きです。宛先の発注者名は、管理者がマスタの工事名リストに「工事名｜発注者名」と登録すると自動印字されます<br>
       <b>一覧・データ：</b>「是正一覧出力（PDF）」「Excel出力（CSV）」も是正管理タブから
       </div>
     </details>
@@ -1488,9 +1489,11 @@ function printOfficialReport(){
   let title, headHtml, signHtml;
   if(fmt === "official"){
     title = "安全パトロール実施報告書";
+    // 宛先：マスタに登録された発注者名を自動印字（未登録は手書き用の下線）
+    const client = (masters.clients && masters.clients[rep.site]) || "";
     headHtml = `
 <div style="text-align:right;">提出日：${todayJ}</div>
-<div style="font-size:15px; margin:14px 0 4px;">＿＿＿＿＿＿＿＿＿＿＿＿＿＿　御中</div>
+<div style="font-size:15px; margin:14px 0 4px;">${client ? esc(client) : "＿＿＿＿＿＿＿＿＿＿＿＿＿＿"}　御中</div>
 <div class="co" style="margin-top:10px;">株式会社中西組<br>現場代理人：＿＿＿＿＿＿＿＿＿＿＿＿</div>
 <p style="margin:14px 0 4px;">　下記のとおり安全パトロールを実施${allDone ? "し、指摘事項の是正を完了" : ""}いたしましたので、ご報告申し上げます。</p>
 <div style="text-align:center; letter-spacing:6px; margin:4px 0;">記</div>`;
@@ -2133,7 +2136,10 @@ function renderConfig(){
 }
 // 管理者ページの描画
 function renderAdmin(){
-  document.getElementById("ms_sites").value = masters.sites.join("\n");
+  // 工事名リスト（発注者名が登録済みの工事は「工事名｜発注者名」で表示）
+  document.getElementById("ms_sites").value = masters.sites.map(s =>
+    (masters.clients && masters.clients[s]) ? s + "｜" + masters.clients[s] : s
+  ).join("\n");
   document.getElementById("ms_ptypes").value = masters.ptypes.join("\n");
   document.getElementById("ms_roles").value = (masters.roles||[]).join("\n");
   document.getElementById("ms_common").value = masters.common.join("\n");
@@ -2172,7 +2178,15 @@ function renderModulesEditor(){
 }
 function collectMastersFromUI(){
   const lines = id=>document.getElementById(id).value.split("\n").map(s=>s.trim()).filter(Boolean);
-  masters.sites = lines("ms_sites");
+  // 工事名リスト：「工事名｜発注者名」形式に対応（全角・半角の縦棒どちらでも可）
+  masters.clients = {};
+  masters.sites = lines("ms_sites").map(l => {
+    const p = l.split(/[｜|]/);
+    const site = p[0].trim();
+    const client = p.slice(1).join("｜").trim();
+    if(site && client) masters.clients[site] = client;
+    return site;
+  }).filter(Boolean);
   masters.ptypes = lines("ms_ptypes");
   masters.roles = lines("ms_roles");
   masters.common = lines("ms_common");
