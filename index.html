@@ -137,6 +137,7 @@
   .photo-btn{display:inline-block; margin:8px 8px 0 0; font-size:13px; color:var(--blue); font-weight:bold; border:1.5px solid var(--blue); border-radius:20px; padding:8px 14px; background:#fff;}
   .thumb{border-radius:8px;}
   details summary::-webkit-details-marker{color:var(--blue);}
+  .dsum{font-weight:bold; color:var(--navy); font-size:14px; cursor:pointer; padding:4px 0;}
 </style>
 </head>
 <body>
@@ -312,34 +313,33 @@
 
 <div id="page-notif" style="display:none">
   <div class="card">
-    <h2>通知（是正依頼・是正報告・上司への報告をアプリ内でやり取り）</h2>
-    <label>表示</label>
-    <select id="nfilter" onchange="renderNotif()">
-      <option value="mine">自分宛て</option>
-      <option value="all">すべて</option>
-    </select>
+    <h2>🔔 通知</h2>
+    <input type="hidden" id="nfilter" value="mine">
+    <div style="display:flex; gap:8px; margin-top:2px;">
+      <button type="button" class="segbtn active" id="nseg_mine" onclick="setNFilter('mine')">📬 自分宛て</button>
+      <button type="button" class="segbtn" id="nseg_all" onclick="setNFilter('all')">📋 すべて</button>
+    </div>
     <div id="nlist" style="margin-top:12px;"></div>
-    <div class="note">※通知は自動同期（1分ごと・アプリ起動時・各操作時）で届きます。宛先の照合には設定タブ「自分の情報」の氏名・役職を使用します。</div>
+    <div class="note">※宛先の照合には設定タブ「自分の情報」の姓名・役職を使用します。</div>
   </div>
 </div>
 
 <div id="page-bunseki" style="display:none">
   <div class="card">
-    <h2>集計・傾向分析（サーバー連動・全端末合算）</h2>
-    <div class="note" id="bn_sync" style="margin-bottom:8px;">このタブを開くと同期サーバから全端末のデータを取得して集計します。</div>
+    <h2>📊 集計（全端末合算）</h2>
+    <div class="note" id="bn_sync" style="margin-bottom:8px;">このタブを開くと自動で最新データに更新されます。</div>
     <div id="bn_summary"></div>
     <div class="actions"><button class="a-back" onclick="syncNow(false)">🔄 最新データに更新</button></div>
   </div>
-  <div class="card"><h2>区分別 指摘件数（共通／工種別／月間重点）</h2><div id="bn_cats"></div></div>
-  <div class="card"><h2>共通基本項目 指摘ランキング（上位10）</h2><div id="bn_items_c"></div></div>
-  <div class="card"><h2>工種別重点項目 指摘ランキング（上位10）</h2><div id="bn_items_m"></div></div>
-  <div class="card"><h2>現場別 指摘件数</h2><div id="bn_sites"></div></div>
-  <div class="card"><h2>月別推移（パトロール回数／指摘件数）</h2><div id="bn_months"></div>
+  <div class="card"><h2>区分別 指摘件数</h2><div id="bn_cats"></div></div>
+  <div class="card"><details><summary class="dsum">📈 共通基本項目 指摘ランキング（上位10）</summary><div id="bn_items_c" style="margin-top:8px;"></div></details></div>
+  <div class="card"><details><summary class="dsum">📈 工種別重点項目 指摘ランキング（上位10）</summary><div id="bn_items_m" style="margin-top:8px;"></div></details></div>
+  <div class="card"><details><summary class="dsum">🏗 現場別 指摘件数</summary><div id="bn_sites" style="margin-top:8px;"></div></details></div>
+  <div class="card"><details><summary class="dsum">📅 月別推移（回数／指摘件数）</summary><div id="bn_months" style="margin-top:8px;"></div>
     <div class="actions"><button class="a-copy" onclick="exportLedgerCSV()">分析データをExcel出力（CSV）</button></div>
-    <div class="note">※集計対象は同期サーバに統合された全端末の確定済み報告書・是正台帳です（タブを開いたとき・「最新データに更新」で自動的に最新化）。同期URL未設定の端末では、この端末のデータのみが対象になります。</div>
-  </div>
+  </details></div>
   <div class="card">
-    <h2 id="bn_arch_title">アーカイブ（完了・承認済の是正案件）</h2>
+    <h2 id="bn_arch_title">🗄 アーカイブ（完了済みの是正案件）</h2>
     <div style="display:flex; gap:8px;">
       <select id="archY" onchange="renderArchive()" style="flex:1;"></select>
       <select id="archM" onchange="renderArchive()" style="flex:1;"></select>
@@ -349,7 +349,7 @@
       <button class="a-copy" onclick="printArchive()">アーカイブ出力（PDF）</button>
       <button class="a-copy" onclick="exportArchiveCSV()">Excel出力（CSV）</button>
     </div>
-    <div class="note">※完了・承認済みの案件は是正管理タブから自動的にこちらへ移動し、月ごとに年間保管されます。年・月を選んで閲覧でき、選択した期間のPDF（写真付き）・CSVを出力できます。</div>
+    <div class="note">※完了した案件は自動でここに月ごとに保管されます。年・月を選んで閲覧・出力できます。</div>
   </div>
 </div>
 
@@ -401,35 +401,37 @@
 
 <div id="page-config" style="display:none">
   <div class="card">
-    <h2>自分の情報（通知の宛先照合用）</h2>
+    <h2>👤 自分の情報</h2>
     <div style="display:flex; gap:10px;">
-      <div style="flex:1;"><label>姓</label><input type="text" id="me_sei" placeholder="例）山田"></div>
-      <div style="flex:1;"><label>名</label><input type="text" id="me_mei" placeholder="例）太郎"></div>
+      <div style="flex:1;"><label>姓<span class="req">必須</span></label><input type="text" id="me_sei" placeholder="例）山田"></div>
+      <div style="flex:1;"><label>名<span class="req">必須</span></label><input type="text" id="me_mei" placeholder="例）太郎"></div>
     </div>
-    <div class="note">※点検者名・現場担当者名と同じ表記にしてください（姓と名の間のスペースの有無は問いません）</div>
-    <label>役職（上司として報告を受ける方のみ選択。一般の方は「なし」のまま）</label>
+    <div class="note">※通知の宛先になります。点検者名・現場担当者名と同じ表記で（スペースの有無は問いません）</div>
+    <label>役職（上司として報告を受ける方のみ。一般の方は「なし」のまま）</label>
     <select id="me_yaku"></select>
     <div class="actions"><button class="a-copy" onclick="saveMe()">自分の情報を保存</button></div>
   </div>
   <div class="card">
-    <h2>自動同期設定（全員で是正台帳を共有）</h2>
-    <div class="note" style="margin-bottom:6px;">会社の同期サーバのURLは<b>アプリに標準で組み込み済み</b>です。設定は不要で、インストール直後から全員のスマホと自動同期されます。同期サーバを変更した場合のみ、管理者の案内に従って下のURLを貼り替えてください。</div>
-    <label>同期URL（標準設定済み・通常は変更不要）</label>
-    <input type="text" id="syncUrl" placeholder="標準の同期サーバを使用します">
-    <label>管理者キー（管理者のみ入力。マスタ・報告先を変更して全端末へ配信できます）</label>
-    <input type="text" id="adminKey" placeholder="一般の方は空欄のまま">
-    <div class="actions"><button class="a-copy" onclick="saveSyncUrl()">同期設定を保存</button></div>
-  </div>
-  <div class="card">
-    <h2>端末通知（スマホの通知欄に表示）</h2>
-    <div class="note" style="margin-bottom:6px;">有効にすると、新しい通知（是正依頼・是正報告・完了報告など）が届いたとき、スマホの通知欄にも表示され、アプリアイコンに未読数バッジが付きます（対応端末のみ）。<br>※アプリを完全に終了している間は表示されません（次にアプリが動いた時にまとめて表示）。<br>※iPhone/iPadは、ホーム画面に追加したアプリから開いて有効化してください（iOS 16.4以上）。</div>
+    <h2>🔔 端末通知</h2>
+    <div class="note" style="margin-bottom:6px;">新しい通知が届いたとき、スマホの通知欄にも表示し、アプリアイコンに未読数バッジを付けます（対応端末のみ）。iPhone/iPadはホーム画面に追加したアプリから有効化してください。</div>
     <div class="actions"><button class="a-copy" onclick="enableDeviceNotif()">📳 端末通知を有効にする</button></div>
     <div class="note" id="dnStatus"></div>
   </div>
   <div class="card">
-    <h2>管理者メニュー</h2>
-    <div class="note" style="margin-bottom:6px;">チェック項目・工事名・報告先の変更、データの初期化は管理者専用ページで行います（上の「自動同期設定」で管理者キーの入力が必要です）。</div>
+    <h2>🔒 管理者メニュー</h2>
+    <div class="note" style="margin-bottom:6px;">チェック項目・工事名・発注者名・報告先の変更、データの初期化は管理者専用ページで行います（下の「同期の詳細設定」で管理者キーの入力が必要です）。</div>
     <div class="actions"><button class="a-copy" onclick="openAdmin()">🔒 管理者ページを開く</button></div>
+  </div>
+  <div class="card">
+    <details>
+      <summary class="dsum">⚙ 同期の詳細設定（通常は変更不要）</summary>
+      <div class="note" style="margin:8px 0 6px;">同期サーバのURLは<b>アプリに組み込み済み</b>のため、通常このページの操作は不要です。管理者キーの入力、またはサーバ変更時のURL貼り替えにのみ使用します。</div>
+      <label>同期URL（標準設定済み）</label>
+      <input type="text" id="syncUrl" placeholder="標準の同期サーバを使用します">
+      <label>管理者キー（管理者のみ入力）</label>
+      <input type="text" id="adminKey" placeholder="一般の方は空欄のまま">
+      <div class="actions"><button class="a-copy" onclick="saveSyncUrl()">同期設定を保存</button></div>
+    </details>
   </div>
 </div>
 </main>
@@ -1428,6 +1430,8 @@ function renderNotif(){
   const unreadL = list.filter(isUnread);
   const readL = list.filter(n=>!isUnread(n));
   let h = "";
+  // 未読が2件以上なら「すべて既読にする」を表示（手数削減）
+  window.__unreadCount = list.filter(isUnread).length;
   // 端末通知が未許可なら案内バナー（1タップで有効化）
   if(deviceNotifState() === "default"){
     h += `<div onclick="enableDeviceNotif()" style="background:#eef4ff; border:1.5px solid #cfe0f5; border-radius:10px; padding:10px 12px; margin-bottom:10px; cursor:pointer;">
@@ -1436,7 +1440,10 @@ function renderNotif(){
     </div>`;
   }
   // 未読：これまでどおりのカード表示（メールの未読のイメージ）
-  h += `<div style="font-size:12px; font-weight:bold; color:var(--ng); margin:4px 0;">📬 未読 ${unreadL.length} 件</div>`;
+  h += `<div style="display:flex; align-items:center; justify-content:space-between; margin:6px 0 4px;">
+    <span style="font-size:12px; font-weight:bold; color:var(--ng);">📬 未読 ${unreadL.length} 件</span>
+    ${unreadL.length>=2 ? '<button onclick="markAllRead()" style="background:#fff; color:var(--blue); border:1.5px solid var(--blue); border-radius:14px; padding:5px 12px; font-size:12px; font-weight:bold;">すべて既読にする</button>' : ''}
+  </div>`;
   h += unreadL.length ? unreadL.map(n=>{
     const toStr = n.to? (n.to.name? esc(n.to.name)+" さん" : esc(n.to.roles? n.to.roles.join("・") : (n.to.role||""))+" 宛") : "";
     return `<div class="zcard" style="border-color:var(--ng);">
@@ -1488,6 +1495,27 @@ function markRead(id){
   if(n){ n.read = n.read || {}; n.read[key] = true; lsSet("anpat_reports", store); }
   renderNotif();
   syncNow(false);
+}
+// 未読をまとめて既読にする（手数削減）
+function markAllRead(){
+  const key = meKey();
+  const store = allStore();
+  const targets = store.filter(x=>x.kind==="notif" && isMine(x) && !(x.read && x.read[key]));
+  if(!targets.length) return;
+  if(!confirm("未読 "+targets.length+" 件をすべて既読にしますか？")) return;
+  targets.forEach(x=>{ x.read = x.read || {}; x.read[key] = true; });
+  lsSet("anpat_reports", store);
+  renderNotif();
+  syncNow(false);
+}
+// 通知の表示切替（自分宛て／すべて）1タップトグル
+function setNFilter(v){
+  const h = document.getElementById("nfilter");
+  if(h) h.value = v;
+  const a = document.getElementById("nseg_mine"), b = document.getElementById("nseg_all");
+  if(a) a.classList.toggle("active", v==="mine");
+  if(b) b.classList.toggle("active", v==="all");
+  renderNotif();
 }
 
 // ===== 正式報告書（社外提出用）の出力 =====
