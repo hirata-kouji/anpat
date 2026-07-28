@@ -477,6 +477,7 @@
       ① 【是正報告】の通知が届いたら「是正管理」タブへ（立場：安パト者）<br>
       ② 報告書ごとに是正後の写真を確認し「<b>まとめて承認して ○○ へ完了報告</b>」を1回タップ（報告書内の全指摘を一括承認）<br>
       ③ 上司と担当者へ完了通知が1通ずつ自動送信されます（報告先の役職は設定タブで変更可）<br>
+      ④ 上司の方は、届いた【是正完了報告】通知の「<b>✅ 承認する</b>」を押すと、その場で承認できます（承認記録が全端末に共有され、点検者へ【上司承認】が通知されます）<br>
       ④ 完了した案件は「集計」タブのアーカイブへ自動で移動します
       </div>
     </details>
@@ -1404,7 +1405,37 @@ function notifyDevice(){
     lsSet("anpat_notified", seen.concat(fresh.map(n=>n.id)).slice(-300));
   }catch(e){}
 }
-const NTYPE_COLOR = {"是正依頼":"s-open","是正報告":"s-fixed","安パト報告":"s-fixed","是正完了":"s-done","是正完了報告":"s-done"};
+const NTYPE_COLOR = {"是正依頼":"s-open","是正報告":"s-fixed","安パト報告":"s-fixed","是正完了":"s-done","是正完了報告":"s-done","上司承認":"s-done"};
+
+// ===== 上司承認（是正完了報告の通知からワンタップで承認） =====
+// この通知に対して自分（報告先役職者）が承認ボタンを出せるか
+function bossApprovable(n){
+  if(!n || n.type!=="是正完了報告" || !n.zid) return false;
+  if(!isMine(n)) return false;
+  const me = getMe();
+  if(!me.name) return false;
+  // すでに自分が承認済みなら出さない（承認は「上司承認」通知として記録される）
+  return !notifList().some(x=>x.type==="上司承認" && x.zid===n.zid && nameEq(x.from, me.name));
+}
+function bossApprove(nid){
+  const me = getMe();
+  if(!me.name){ alert("設定タブの「自分の情報」で姓・名を保存してから承認してください。"); return; }
+  const n = notifList().find(x=>x.id===nid); if(!n) return;
+  if(!confirm("この是正完了報告を承認しますか？\n（承認の記録が全端末に共有され、点検者へ通知されます）")) return;
+  const d = new Date().toISOString().slice(0,10);
+  // 台帳側にも上司承認を記録（アーカイブ・帳票用）
+  ledger.filter(z=>z.repId===n.zid).forEach(z=>{
+    z.bossOk = {by: me.name, yaku: me.yaku||"", date: d};
+    queuePending(z);
+  });
+  // 点検者（完了報告の送信者）へ承認を通知
+  const title = String(n.title||"").replace(/^【是正完了報告】/, "");
+  notify({name: n.from||""}, "上司承認", "【上司承認】"+title,
+    (me.yaku? me.yaku+"　" : "")+me.name+" が是正完了報告を承認しました（承認日 "+d+"）。", n.zid);
+  markRead(nid); // 既読化＋再描画＋同期
+  if(typeof closeNotif==="function") closeNotif();
+  alert("承認しました。点検者へ【上司承認】を通知しました。");
+}
 function renderNotif(){
   updateNotifBadge();
   const me = getMe();
@@ -1453,6 +1484,7 @@ function renderNotif(){
       <div style="font-size:13px; white-space:pre-wrap; margin-top:4px;">${esc(n.body)}</div>
       <div class="actions">
         ${n.zid? '<button class="a-back" onclick="showPage(\'zesei\')">是正管理で開く</button>' : ""}
+        ${bossApprovable(n)? `<button class="a-copy" style="background:var(--ok);" onclick="bossApprove('${n.id}')">✅ 承認する</button>` : ""}
         <button class="a-copy" onclick="markRead('${n.id}')">既読にする</button>
       </div>
     </div>`;
@@ -1479,7 +1511,7 @@ function openNotif(id){
     <div style="font-weight:bold; margin-top:8px; line-height:1.5;">${esc(n.title)}</div>
     <div class="zmeta" style="margin:4px 0 8px;">${esc(n.date)}｜${esc(n.from)} → ${toStr}</div>
     <div style="font-size:13px; white-space:pre-wrap; border-top:1px solid var(--line); padding-top:8px;">${esc(n.body)}</div>
-    ${n.zid? '<div class="actions"><button class="a-back" onclick="closeNotif(); showPage(\'zesei\')">是正管理で開く</button></div>' : ""}`;
+    ${(n.zid || bossApprovable(n))? `<div class="actions">${n.zid? '<button class="a-back" onclick="closeNotif(); showPage(\'zesei\')">是正管理で開く</button>' : ""}${bossApprovable(n)? `<button class="a-copy" style="background:var(--ok);" onclick="bossApprove('${n.id}')">✅ 承認する</button>` : ""}</div>` : ""}`;
   document.getElementById("notifov").style.display = "block";
   document.body.style.overflow = "hidden";
 }
