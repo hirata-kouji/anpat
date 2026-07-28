@@ -125,7 +125,18 @@
   .progress .counts,.counts{font-weight:bold; color:var(--blue); font-size:15px;}
   .progress button{border-radius:12px; padding:12px 22px; font-size:15px; background:var(--blue);}
   .progress button:disabled{background:#aab4c8;}
-  button:active{filter:brightness(.88);}
+  button{transition:filter .12s, transform .06s;}
+  button:active{filter:brightness(.88); transform:scale(.98);}
+
+  /* ===== UI改善第2弾 ===== */
+  .card,.zcard{box-shadow:0 1px 4px rgba(31,56,100,.06);}
+  .item{padding:14px 0;}
+  .segbtn{flex:1; padding:10px 0 9px; border:1.5px solid var(--line); background:#fff; border-radius:12px; font-size:14px; font-weight:bold; color:#5a6472; line-height:1.3;}
+  .segbtn .segsub{display:block; font-size:10px; font-weight:normal; opacity:.85; margin-top:1px;}
+  .segbtn.active{background:var(--blue); border-color:var(--blue); color:#fff;}
+  .photo-btn{display:inline-block; margin:8px 8px 0 0; font-size:13px; color:var(--blue); font-weight:bold; border:1.5px solid var(--blue); border-radius:20px; padding:8px 14px; background:#fff;}
+  .thumb{border-radius:8px;}
+  details summary::-webkit-details-marker{color:var(--blue);}
 </style>
 </head>
 <body>
@@ -190,12 +201,12 @@
   </div>
   <div class="card">
     <h2>基本情報</h2>
-    <label>工事名　<span style="color:#999">（設定タブで追加・変更できます）</span></label>
+    <label>工事名<span class="req">必須</span></label>
     <select id="site" onchange="onSiteChange()"></select>
     <input type="text" id="siteOther" placeholder="工事名を入力してください" style="display:none; margin-top:6px;">
-    <label>パトロール種別</label>
+    <label>パトロール種別<span class="req">必須</span></label>
     <select id="ptype"></select>
-    <label>工種（重点モジュール）</label>
+    <label>工種（重点モジュール）<span class="req">必須</span></label>
     <select id="wtype" onchange="render()"></select>
     <label>点検者名（氏名のみ・所属や肩書は書かない）<span class="req">必須</span></label>
     <input type="text" id="inspector" placeholder="例）山田太郎">
@@ -271,14 +282,16 @@
 
 <div id="page-zesei" style="display:none">
   <div class="card">
-    <h2>是正管理（未是正 → 是正報告 → 承認 → 上司へ報告完了）</h2>
-    <label>操作する立場</label>
-    <select id="role" onchange="renderZesei()">
-      <option value="pat">安パト者（承認・上司へ報告）</option>
-      <option value="fix">被点検者（是正報告）</option>
-    </select>
+    <h2>是正管理</h2>
+    <label>操作する立場（タップで切替）</label>
+    <input type="hidden" id="role" value="pat">
+    <div style="display:flex; gap:8px; margin-top:2px;">
+      <button type="button" class="segbtn active" id="seg_pat" onclick="setRole('pat')">🛡 安パト者<span class="segsub">承認・上司へ報告</span></button>
+      <button type="button" class="segbtn" id="seg_fix" onclick="setRole('fix')">🔧 被点検者<span class="segsub">是正報告</span></button>
+    </div>
     <div id="zlist" style="margin-top:12px;"></div>
-    <div style="border-top:1px solid var(--line); margin-top:12px; padding-top:8px;">
+    <details style="border-top:1px solid var(--line); margin-top:12px; padding-top:4px;">
+      <summary style="font-weight:bold; color:var(--navy); padding:8px 0; cursor:pointer; font-size:14px;">📄 帳票出力（正式報告書・是正一覧・CSV）</summary>
       <label>正式報告書の出力（チェック項目一覧＋是正報告・完了報告込み）</label>
       <select id="repSel"></select>
       <label>様式</label>
@@ -289,12 +302,11 @@
       <div class="actions">
         <button class="a-copy" onclick="printOfficialReport()">正式報告書を出力（PDF）</button>
       </div>
-    </div>
-    <div class="actions">
-      <button class="a-back" onclick="printLedgerReport()">是正一覧出力（PDF）</button>
-      <button class="a-back" onclick="exportLedgerCSV()">Excel出力（CSV）</button>
-    </div>
-    <div class="note" id="syncStatus">同期は自動で行われます（1分ごと・アプリを開いた時・各操作時）。状況は画面上部に常時表示され、タップすると手動同期できます。</div>
+      <div class="actions">
+        <button class="a-back" onclick="printLedgerReport()">是正一覧出力（PDF）</button>
+        <button class="a-back" onclick="exportLedgerCSV()">Excel出力（CSV）</button>
+      </div>
+    </details>
   </div>
 </div>
 
@@ -520,6 +532,7 @@
 <div class="progress" id="progressbar">
   <div class="counts" id="counts">0/0</div>
   <div class="bar"><div id="barfill"></div></div>
+  <button id="bulkokbtn" onclick="bulkOk()" style="background:#fff; color:var(--ok); border:1.5px solid var(--ok); padding:12px 10px; font-size:13px; white-space:nowrap;">残り良好</button>
   <button id="donebtn" onclick="makeReport()">プレビュー</button>
 </div>
 
@@ -882,6 +895,37 @@ function setLevel(key, lv){
   document.getElementById("d_"+key).className =
     (lv==="warn"||lv==="ng") ? "detail show" : "detail";
   updateProgress();
+  // 良好・対象外を選んだら次の未入力項目へ自動スクロール（要注意・要是正は記入のためその場に留まる）
+  if(lv==="ok" || lv==="na"){
+    const all = [...document.querySelectorAll("#page-input .item")];
+    const idx = all.findIndex(el=>el.id==="it_"+key);
+    const next = idx>=0 && all.slice(idx+1).find(el=>{
+      const k2 = el.id.slice(3);
+      return !(state[k2] && state[k2].level);
+    });
+    if(next) setTimeout(()=>next.scrollIntoView({behavior:"smooth", block:"center"}), 130);
+  }
+}
+
+// 未入力の項目をまとめて「良好」にする（最後の仕上げ用・確認あり）
+function bulkOk(){
+  const rest = [...document.querySelectorAll("#page-input .item")]
+    .map(el=>el.id.slice(3))
+    .filter(k=>!(state[k] && state[k].level));
+  if(!rest.length){ alert("未入力の項目はありません。"); return; }
+  if(!confirm("未入力の "+rest.length+" 項目をすべて「良好」にしますか？\n※実際に確認した項目だけにしてください。要注意・要是正があれば先に入力を。")) return;
+  rest.forEach(k=>setLevel(k, "ok"));
+  window.scrollTo({top:document.body.scrollHeight, behavior:"smooth"});
+}
+
+// 是正管理：立場の1タップ切替
+function setRole(r){
+  const h = document.getElementById("role");
+  if(h) h.value = r;
+  const sp = document.getElementById("seg_pat"), sf = document.getElementById("seg_fix");
+  if(sp) sp.classList.toggle("active", r==="pat");
+  if(sf) sf.classList.toggle("active", r==="fix");
+  renderZesei();
 }
 
 // 写真サムネイルを削除ボタン付きで描画
