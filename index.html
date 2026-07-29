@@ -1414,6 +1414,11 @@ function bossApprovable(n){
   if(!isMine(n)) return false;
   const me = getMe();
   if(!me.name) return false;
+  // マスタ（報告先設定）で承認上司が指定されていれば、その役職のみ承認可（未指定なら報告先全員）
+  const rep = lsGet("anpat_reports", []).find(r=>r.id===n.zid && !r.kind);
+  const rt = rep ? routes[rep.ptype] : null;
+  const ap = (rt && Array.isArray(rt.apRoles)) ? rt.apRoles : [];
+  if(ap.length && (!me.yaku || ap.indexOf(me.yaku) < 0)) return false;
   // すでに自分が承認済みなら出さない（承認は「上司承認」通知として記録される）
   return !notifList().some(x=>x.type==="上司承認" && x.zid===n.zid && nameEq(x.from, me.name));
 }
@@ -2050,13 +2055,16 @@ function approveFixRep(gi){
         + "\n　是正報告：" + (z.fix? z.fix.date : "") + "　" + (z.fix && z.fix.comment? z.fix.comment : "")).join("\n")
     + "\n\n承認日　：" + d + "\n"
     + "※是正前後の写真はアプリの是正管理台帳をご確認ください。";
-  notify({roles:rtRoles}, "是正完了報告", "【是正完了報告】"+z0.site+"（"+items.length+"件）", body, z0.repId||z0.id);
+  // 送信先＝報告先役職＋承認上司（承認上司には必ず届くように合算）
+  const apRolesSend = Array.isArray(rt.apRoles) ? rt.apRoles : [];
+  const sendRoles = [...new Set([...rtRoles, ...apRolesSend])];
+  notify({roles:sendRoles}, "是正完了報告", "【是正完了報告】"+z0.site+"（"+items.length+"件）", body, z0.repId||z0.id);
   if(z0.tanto && z0.tanto!=="（未記入）"){
     notify({name:z0.tanto}, "是正完了", "【是正完了】"+z0.site,
       items.length+"件の是正を確認し、承認しました（承認日 "+d+"）。ありがとうございました。", z0.repId||z0.id);
   }
   syncNow(false);
-  alert("承認しました（"+items.length+"件まとめて）。" + rtRoles.join("・") + " と担当者へアプリ内通知を送りました。");
+  alert("承認しました（"+items.length+"件まとめて）。" + sendRoles.join("・") + " と担当者へアプリ内通知を送りました。");
 }
 
 // ===== 自動同期（Google Apps Script 同期サーバ） =====
@@ -2168,7 +2176,8 @@ function renderRoutes(listOpt){
   routesRendered = list.slice();
   document.getElementById("routelist").innerHTML = list.map((p,i)=>{
     const sel = routeRoles(routes[p]);
-    const opts = [...new Set([...rolesList(), ...sel])]; // 選択済みの旧役職も表示して外せるように
+    const apSel = (routes[p] && Array.isArray(routes[p].apRoles)) ? routes[p].apRoles : [];
+    const opts = [...new Set([...rolesList(), ...sel, ...apSel])]; // 選択済みの旧役職も表示して外せるように
     return `
     <div style="border-top:1px solid var(--line); padding:10px 0;">
       <div style="font-size:13px; font-weight:bold;">${p}</div>
@@ -2177,6 +2186,11 @@ function renderRoutes(listOpt){
       <div style="display:flex; flex-wrap:wrap; gap:6px; margin:4px 0;">` +
       opts.map(rl=>`<label style="display:inline-flex; align-items:center; gap:5px; border:1px solid var(--line); border-radius:8px; padding:7px 10px; font-size:13px; background:#fff;"><input type="checkbox" class="rt_${i}" value="${rl}" ${sel.includes(rl)?"checked":""}>${rl}</label>`).join("") +
       `</div>
+      <label>承認上司（是正完了報告を「✅承認する」で承認できる役職・複数可）</label>
+      <div style="display:flex; flex-wrap:wrap; gap:6px; margin:4px 0;">` +
+      opts.map(rl=>`<label style="display:inline-flex; align-items:center; gap:5px; border:1px solid #cde6cf; border-radius:8px; padding:7px 10px; font-size:13px; background:#f4faf4;"><input type="checkbox" class="ap_${i}" value="${rl}" ${apSel.includes(rl)?"checked":""}>${rl}</label>`).join("") +
+      `</div>
+      <div class="note" style="margin-top:0;">※未選択の場合は、報告先の役職全員が承認できます。選択した役職には完了報告の通知も必ず届きます。</div>
       <label>報告先メールアドレス（任意）</label><input type="text" id="rm_${i}" value="${(routes[p]||{}).mail||""}" placeholder="例）jomu@example.co.jp">
     </div>`;
   }).join("");
@@ -2187,7 +2201,8 @@ function collectRoutesUI(){
     const boxes = document.querySelectorAll(".rt_"+i);
     if(!boxes.length) return;
     const yakus = Array.from(document.querySelectorAll(".rt_"+i+":checked")).map(el=>el.value);
-    routes[p] = {yakus: yakus, mail: (document.getElementById("rm_"+i)||{}).value||""};
+    const apRoles = Array.from(document.querySelectorAll(".ap_"+i+":checked")).map(el=>el.value);
+    routes[p] = {yakus: yakus, apRoles: apRoles, mail: (document.getElementById("rm_"+i)||{}).value||""};
   });
 }
 // 種別リストの入力に合わせて報告先設定をリアルタイム連動
