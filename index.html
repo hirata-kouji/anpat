@@ -1120,9 +1120,15 @@ function confirmReport(){
         "【是正依頼】"+lastMeta.site+"（要是正"+lastNg.length+"件・期限 "+dlN.toISOString().slice(0,10)+"）",
         lastText, null);
     }
+    // 上司への安パト報告には、チェック項目ごとの結果一覧も付ける
+    const LVLJ = {ok:"良好", warn:"要注意", ng:"要是正", na:"対象外"};
+    const checkListTx = lastAll.length
+      ? "\n\n■チェック項目別 結果（全"+lastAll.length+"項目）\n"
+        + lastAll.map(x=>"・"+x.t+"："+(LVLJ[x.l]||"") + (x.cm? "（"+x.cm+"）" : "")).join("\n")
+      : "";
     notify({roles: rolesN.length? rolesN : ["上司"]}, "安パト報告",
       "【安パト報告】"+lastMeta.site+" "+lastMeta.date+"（要是正"+lastNg.length+"件）",
-      lastText, null);
+      lastText + checkListTx, null);
     madeRegistered = true;
     syncNow(false);
   }
