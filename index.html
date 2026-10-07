@@ -526,7 +526,7 @@
 
 <!-- オフライン未送信バナー（是正データはサーバー保管のみのため、未送信分を明示して再送を促す） -->
 <div id="offbar" style="display:none; position:fixed; left:12px; right:12px; bottom:14px; z-index:55; background:#fff8e1; border:2px solid #f5a623; border-radius:12px; padding:10px 12px; box-shadow:0 4px 14px rgba(0,0,0,.25);">
-  <div style="font-size:13px; font-weight:bold; color:#b26a00;">⚠ 未送信の是正データがあります</div>
+  <div id="offbarTitle" style="font-size:13px; font-weight:bold; color:#b26a00;">⚠ 未送信の是正データがあります</div>
   <div id="offbarText" style="font-size:12px; margin:4px 0 8px; line-height:1.5;"></div>
   <button onclick="syncNow(true)" style="background:#1f3864; color:#fff; border:none; border-radius:8px; padding:8px 14px; font-size:13px;">今すぐ再送</button>
   <button onclick="document.getElementById('offbar').style.display='none'" style="background:#eee; color:#333; border:none; border-radius:8px; padding:8px 14px; font-size:13px; margin-left:6px;">閉じる</button>
@@ -1126,9 +1126,13 @@ function confirmReport(){
       ? "\n\n■チェック項目別 結果（全"+lastAll.length+"項目）\n"
         + lastAll.map(x=>"・"+x.t+"："+(LVLJ[x.l]||"") + (x.cm? "（"+x.cm+"）" : "")).join("\n")
       : "";
+    // 報告書の写真（要是正・要注意・項目外すべて）は通知とは別にサーバーへ保存し、通知には参照だけ持たせる
+    const repPhotos = lastPhotos.map(p=>({data:p.data, caption:p.caption}));
     notify({roles: rolesN.length? rolesN : ["上司"]}, "安パト報告",
       "【安パト報告】"+lastMeta.site+" "+lastMeta.date+"（要是正"+lastNg.length+"件）",
-      lastText + checkListTx, null);
+      lastText + checkListTx, null,
+      repPhotos.length ? {prid: repId, pcount: repPhotos.length} : null);
+    if(repPhotos.length) queuePhotoUpload(repId, repPhotos);
     madeRegistered = true;
     syncNow(false);
   }
@@ -1138,9 +1142,11 @@ function confirmReport(){
   document.getElementById("finalActions").style.display = "block";
   window.scrollTo(0,0);
   if(lastNg.length){
-    alert("確定しました。要是正 "+lastNg.length+" 件を「是正管理」に登録し、担当者（"+(lastMeta.tanto||"未記入")+"）と上司へアプリ内通知を送りました。");
+    alert("確定しました。要是正 "+lastNg.length+" 件を「是正管理」に登録し、担当者（"+(lastMeta.tanto||"未記入")+"）と上司へアプリ内通知を送りました。"
+      + (lastPhotos.length? "\n報告書の写真 "+lastPhotos.length+" 枚も通知に付けて送ります。" : ""));
   } else {
-    alert("確定しました（要是正はありません）。上司へ安パト報告の通知を送りました。");
+    alert("確定しました（要是正はありません）。上司へ安パト報告の通知を送りました。"
+      + (lastPhotos.length? "\n報告書の写真 "+lastPhotos.length+" 枚も通知に付けて送ります。" : ""));
   }
 }
 
@@ -1337,14 +1343,14 @@ function saveMe(){
 }
 function allStore(){ return lsGet("anpat_reports", []); }
 function notifList(){ return allStore().filter(r=>r.kind==="notif"); }
-function notify(to, type, title, body, zid){
+function notify(to, type, title, body, zid, extra){
   const me = getMe();
   const store = allStore();
-  store.push({
+  store.push(Object.assign({
     id: "n"+Date.now()+Math.floor(Math.random()*1000),
     kind: "notif", ts: Date.now(), date: new Date().toISOString().slice(0,10),
     from: me.name || "（無記名）", to: to, type: type, title: title, body: body, zid: zid||null, read: {}
-  });
+  }, extra||{}));
   lsSet("anpat_reports", store);
   updateNotifBadge();
 }
@@ -1410,6 +1416,91 @@ function notifyDevice(){
     if(fresh.length > 3) show("安全パトロール", "ほか " + (fresh.length-3) + " 件の未読通知があります", "anpat-more");
     lsSet("anpat_notified", seen.concat(fresh.map(n=>n.id)).slice(-300));
   }catch(e){}
+}
+// ===== 安パト報告の写真（通知に添付） =====
+// 写真は重いので、1分ごとの同期データには入れず、報告書ごとにサーバーへ別送する。
+// 送れなかった分は端末内（IndexedDB）に保管し、電波が戻ったら自動で再送する。
+const PH_DB = "anpat_photos", PH_ST = "pending";
+const photoCache = {};   // 報告書ID → 写真（この画面を開いている間だけ保持）
+const photoOpen = {};    // 未読カードで「写真を見る」を押した通知
+const phMem = {};        // IndexedDB が使えない端末の予備
+let phPending = 0, phFlushing = false;
+function phDb(){
+  return new Promise((res, rej)=>{
+    if(!("indexedDB" in window)) return rej(new Error("no idb"));
+    const r = indexedDB.open(PH_DB, 1);
+    r.onupgradeneeded = ()=>r.result.createObjectStore(PH_ST, {keyPath:"repId"});
+    r.onsuccess = ()=>res(r.result);
+    r.onerror = ()=>rej(r.error);
+  });
+}
+function phTx(mode, fn){
+  return phDb().then(db=>new Promise((res, rej)=>{
+    const tx = db.transaction(PH_ST, mode);
+    const out = fn(tx.objectStore(PH_ST));
+    tx.oncomplete = ()=>res(out && out.result!==undefined ? out.result : undefined);
+    tx.onerror = ()=>rej(tx.error);
+  }));
+}
+function phPut(rec){ return phTx("readwrite", st=>st.put(rec)); }
+function phDel(id){ return phTx("readwrite", st=>st.delete(id)); }
+function phAll(){ return phTx("readonly", st=>st.getAll()); }
+async function queuePhotoUpload(repId, photos){
+  photoCache[repId] = photos;
+  try{ await phPut({repId:repId, photos:photos, ts:Date.now()}); }
+  catch(e){ phMem[repId] = {repId:repId, photos:photos}; }
+  flushPhotoUploads();
+}
+// 未送信の写真をサーバーへ送る（同期のたびに呼ばれる）
+async function flushPhotoUploads(){
+  if(phFlushing) return;
+  phFlushing = true;
+  let list = [];
+  try{ list = await phAll(); }catch(e){}
+  Object.keys(phMem).forEach(k=>{ if(!list.some(x=>x.repId===k)) list.push(phMem[k]); });
+  phPending = list.length;
+  try{
+    const url = getSyncUrl();
+    for(const rec of list){
+      if(!url) break;
+      const r = await fetch(url, {method:"POST", body:JSON.stringify({photoSave:1, repId:rec.repId, photos:rec.photos}), redirect:"follow"});
+      const d = await r.json();
+      if(!(d && d.photoSaved === rec.repId)) break;   // サーバーが未対応・失敗 → 次回に再送
+      try{ await phDel(rec.repId); }catch(e){}
+      delete phMem[rec.repId];
+      phPending--;
+    }
+  }catch(e){ /* 通信エラー：次回に再送 */ }
+  finally{
+    phFlushing = false;
+    updateOfflineBanner();
+  }
+}
+// 通知に付いた写真を表示（必要になったときだけサーバーから取得）
+async function showNotifPhotos(nid, boxId){
+  const n = notifList().find(x=>x.id===nid);
+  const box = document.getElementById(boxId);
+  if(!n || !n.prid || !box) return;
+  photoOpen[nid] = true;
+  const esc = s=>String(s==null?"":s).replace(/&/g,"&amp;").replace(/</g,"&lt;");
+  const draw = ps=>{
+    box.innerHTML = ps.map(p=>`<img src="${p.data}" style="display:block; max-width:100%; border-radius:8px; border:1px solid var(--line); margin-top:8px;"><div style="font-size:11px; color:#666; margin-top:2px;">${esc(p.caption)}</div>`).join("");
+  };
+  if(photoCache[n.prid] && photoCache[n.prid].length){ draw(photoCache[n.prid]); return; }
+  box.innerHTML = '<div class="note">📷 写真を読み込んでいます…</div>';
+  try{
+    const r = await fetch(getSyncUrl(), {method:"POST", body:JSON.stringify({photoGet:1, repId:n.prid}), redirect:"follow"});
+    const d = await r.json();
+    const ps = (d && d.photoGet === n.prid && Array.isArray(d.photos)) ? d.photos : [];
+    if(ps.length){ photoCache[n.prid] = ps; draw(ps); }
+    else box.innerHTML = '<div class="note">写真はまだサーバーに届いていません（点検者の端末から送信待ちです）。しばらくしてから開き直してください。</div>';
+  }catch(e){
+    box.innerHTML = '<div class="note">写真を読み込めませんでした。電波の届く場所で開き直してください。</div>';
+  }
+}
+function photoBtn(n, boxId){
+  if(!n.prid || !n.pcount) return "";
+  return `<button class="a-back" onclick="showNotifPhotos('${n.id}','${boxId}')">📷 写真を見る（${n.pcount}枚）</button>`;
 }
 const NTYPE_COLOR = {"是正依頼":"s-open","是正報告":"s-fixed","安パト報告":"s-fixed","是正完了":"s-done","是正完了報告":"s-done","上司承認":"s-done"};
 
@@ -1495,9 +1586,11 @@ function renderNotif(){
       <div style="font-size:13px; white-space:pre-wrap; margin-top:4px;">${esc(n.body)}</div>
       <div class="actions">
         ${n.zid? '<button class="a-back" onclick="showPage(\'zesei\')">是正管理で開く</button>' : ""}
+        ${photoBtn(n, "nphc_"+n.id)}
         ${bossApprovable(n)? `<button class="a-copy" style="background:var(--ok);" onclick="bossApprove('${n.id}')">✅ 承認する</button>` : ""}
         <button class="a-copy" onclick="markRead('${n.id}')">既読にする</button>
       </div>
+      <div id="nphc_${n.id}"></div>
     </div>`;
   }).join("") : '<div class="note">未読の通知はありません。</div>';
   // 既読：メール一覧風の小さな1行表示（タップするとポップアップで全文表示）
@@ -1511,6 +1604,8 @@ function renderNotif(){
       </div>`).join("");
   }
   wrap.innerHTML = h;
+  // 「写真を見る」を押していた未読カードは、同期で画面が描き直されても写真を出したままにする
+  unreadL.forEach(n=>{ if(photoOpen[n.id] && n.prid) showNotifPhotos(n.id, "nphc_"+n.id); });
 }
 // 既読通知のポップアップ表示（メールを開くイメージ）
 function openNotif(id){
@@ -1522,9 +1617,11 @@ function openNotif(id){
     <div style="font-weight:bold; margin-top:8px; line-height:1.5;">${esc(n.title)}</div>
     <div class="zmeta" style="margin:4px 0 8px;">${esc(n.date)}｜${esc(n.from)} → ${toStr}</div>
     <div style="font-size:13px; white-space:pre-wrap; border-top:1px solid var(--line); padding-top:8px;">${esc(n.body)}</div>
+    ${n.prid && n.pcount? `<div style="font-size:12px; font-weight:bold; margin-top:10px;">📷 報告書の写真（${n.pcount}枚）</div><div id="nph_pop"></div>` : ""}
     ${(n.zid || bossApprovable(n))? `<div class="actions">${n.zid? '<button class="a-back" onclick="closeNotif(); showPage(\'zesei\')">是正管理で開く</button>' : ""}${bossApprovable(n)? `<button class="a-copy" style="background:var(--ok);" onclick="bossApprove('${n.id}')">✅ 承認する</button>` : ""}</div>` : ""}`;
   document.getElementById("notifov").style.display = "block";
   document.body.style.overflow = "hidden";
+  if(n.prid && n.pcount) showNotifPhotos(n.id, "nph_pop");
 }
 function closeNotif(){
   document.getElementById("notifov").style.display = "none";
@@ -1861,9 +1958,14 @@ function queuePending(entry){
 function updateOfflineBanner(){
   const bar = document.getElementById("offbar");
   if(!bar) return;
-  if(pendingLedger.length){
+  const nP = (typeof phPending==="number") ? phPending : 0;
+  if(pendingLedger.length || nP){
+    const parts = [];
+    if(pendingLedger.length) parts.push("是正データ "+pendingLedger.length+" 件");
+    if(nP) parts.push("報告書の写真 "+nP+" 報告書分");
+    document.getElementById("offbarTitle").textContent = "⚠ 未送信のデータがあります";
     document.getElementById("offbarText").textContent =
-      "是正データ "+pendingLedger.length+" 件がサーバーに送信できていません（オフラインまたは通信エラー）。データは消えません。電波の届く場所に戻ると自動で再送されます。";
+      parts.join("・")+" がサーバーに送信できていません（オフラインまたは通信エラー）。データは消えません。電波の届く場所に戻ると自動で再送されます。";
     bar.style.display = "block";
   } else {
     bar.style.display = "none";
@@ -2155,6 +2257,7 @@ function syncNow(showResult){
       updateBadge();
       updateNotifBadge();
       notifyDevice(); // 新着の自分宛て通知を端末の通知欄にも表示
+      flushPhotoUploads(); // 未送信の報告書写真があれば送る
       if(document.getElementById("page-zesei").style.display==="block") renderZesei();
       if(document.getElementById("page-notif").style.display==="block") renderNotif();
       if(document.getElementById("page-bunseki").style.display==="block") renderBunseki();
