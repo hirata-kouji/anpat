@@ -301,8 +301,13 @@
         <option value="official">役所・発注者提出用（安全パトロール実施報告書）</option>
       </select>
       <div class="actions">
-        <button class="a-copy" onclick="printOfficialReport()">正式報告書を出力（PDF）</button>
+        <button class="a-back" onclick="openRepEditor()">✏️ 編集・写真の追加</button>
       </div>
+      <div class="actions">
+        <button class="a-copy" onclick="printOfficialReport()">正式報告書（PDF）</button>
+        <button class="a-copy" onclick="exportOfficialExcel()">正式報告書（Excel）</button>
+      </div>
+      <div class="note">「編集・写真の追加」で直した文章と追加した写真は、この端末に保存され、PDF・Excelの両方に反映されます。Excelには、あとから写真を貼れる空き枠も付けられます。</div>
       <div class="actions">
         <button class="a-back" onclick="printLedgerReport()">是正一覧出力（PDF）</button>
         <button class="a-back" onclick="exportLedgerCSV()">Excel出力（CSV）</button>
@@ -516,6 +521,72 @@
   </div>
 </div>
 
+<!-- 報告書の編集・写真の追加 -->
+<style>
+  .rebtn{flex:1; padding:8px 0; border:1.5px solid var(--line); background:#fff; border-radius:8px; font-size:13px; font-weight:bold; color:var(--navy);}
+  .rebtn:disabled{opacity:.35;}
+  #repedov h3{font-size:14px; color:var(--navy); margin:16px 0 4px; border-top:1px solid var(--line); padding-top:12px;}
+</style>
+<div id="repedov" style="display:none; position:fixed; inset:0; background:rgba(15,25,50,.6); z-index:61; overflow:auto; -webkit-overflow-scrolling:touch;">
+  <div style="background:#fff; border-radius:14px; margin:20px 10px 40px; padding:16px; box-shadow:0 8px 24px rgba(0,0,0,.3);">
+    <div style="font-size:17px; font-weight:bold; color:var(--navy);">✏️ 報告書の編集・写真の追加</div>
+    <div class="zmeta" id="re_meta" style="margin-top:4px;"></div>
+    <label>様式</label>
+    <select id="re_fmt" onchange="reFmtChanged()">
+      <option value="internal">社内様式（安全パトロール報告書）</option>
+      <option value="official">役所・発注者提出用（安全パトロール実施報告書）</option>
+    </select>
+    <div id="re_official">
+      <label>提出日</label>
+      <input type="date" id="re_date" oninput="reInput()">
+      <label>宛先（「御中」の前に入ります）</label>
+      <input type="text" id="re_client" oninput="reInput()" placeholder="例）神戸市建設局下水道部">
+      <label>現場代理人</label>
+      <input type="text" id="re_agent" oninput="reInput()" placeholder="例）武田 明成">
+      <label>前文</label>
+      <textarea id="re_intro" oninput="reInput()"></textarea>
+    </div>
+    <label>良好・評価事項</label>
+    <textarea id="re_good" oninput="reInput()" placeholder="（記載なし）"></textarea>
+    <div style="text-align:right; margin-top:4px;"><button type="button" class="rebtn" style="flex:none; padding:6px 12px; font-size:12px;" onclick="reResetText()">文章を標準に戻す</button></div>
+
+    <h3>📷 実施状況写真（追加写真）<span style="font-weight:normal; font-size:12px;">　<span id="re_pcount">0</span>枚</span></h3>
+    <div class="note" style="margin-top:0;">報告書の最後に「実施状況写真」として、説明付きで2枚ずつ並びます。要是正の写真と是正後の写真は「3．指摘事項」に自動で載ります。</div>
+    <div style="display:flex; flex-wrap:wrap; gap:6px 14px; margin:6px 0;">
+      <label class="photo-btn" style="margin:0;">📷 撮影<input type="file" accept="image/*" capture="environment" style="display:none" onchange="reAddPhoto(this)"></label>
+      <label class="photo-btn" style="margin:0;">🖼️ フォルダから選択<input type="file" accept="image/*" multiple style="display:none" onchange="reAddPhoto(this)"></label>
+      <a href="javascript:void(0)" class="photo-btn" style="margin:0; text-decoration:none;" onclick="reImport()">📥 点検時の写真を取り込む</a>
+    </div>
+    <div id="re_photos"></div>
+    <label>Excelに付ける空き写真枠（Excelで後から写真を貼る場所）</label>
+    <select id="re_blank" onchange="reInput()">
+      <option value="0">付けない</option>
+      <option value="2">2枠（1段）</option>
+      <option value="4">4枠（2段）</option>
+      <option value="6">6枠（3段）</option>
+    </select>
+    <div class="note" id="re_saved"></div>
+    <div class="actions">
+      <button class="a-copy" onclick="printOfficialReport()">PDFで出力</button>
+      <button class="a-copy" onclick="exportOfficialExcel()">Excelで出力</button>
+    </div>
+    <div class="actions"><button class="a-back" onclick="closeRepEditor()">閉じる</button></div>
+  </div>
+</div>
+<!-- Excelの保存・共有 -->
+<div id="xlov" style="display:none; position:fixed; inset:0; background:rgba(15,25,50,.6); z-index:70;">
+  <div style="background:#fff; border-radius:14px; margin:30vh 18px 0; padding:18px; box-shadow:0 8px 24px rgba(0,0,0,.3); text-align:center;">
+    <div id="xl_msg" style="font-weight:bold; font-size:15px;"></div>
+    <div id="xl_name" style="font-size:11px; color:#666; margin-top:6px; word-break:break-all;"></div>
+    <div id="xl_btns" style="display:none;">
+      <div class="actions">
+        <button class="a-copy" onclick="xlDownload()">📥 保存</button>
+        <button class="a-copy" id="xl_share" onclick="xlShare()">📤 共有</button>
+      </div>
+      <div class="actions"><button class="a-back" onclick="xlHide()">閉じる</button></div>
+    </div>
+  </div>
+</div>
 <!-- 既読通知のポップアップ（メールを開くイメージ） -->
 <div id="notifov" style="display:none; position:fixed; inset:0; background:rgba(15,25,50,.6); z-index:60; overflow:auto; -webkit-overflow-scrolling:touch;" onclick="closeNotif()">
   <div style="background:#fff; border-radius:14px; margin:56px 14px 30px; padding:16px; box-shadow:0 8px 24px rgba(0,0,0,.3);" onclick="event.stopPropagation()">
@@ -1425,23 +1496,34 @@ const photoCache = {};   // 報告書ID → 写真（この画面を開いてい
 const photoOpen = {};    // 未読カードで「写真を見る」を押した通知
 const phMem = {};        // IndexedDB が使えない端末の予備
 let phPending = 0, phFlushing = false;
+// 端末内の保存場所：pending＝送信待ちの報告書写真／zdraft＝是正の下書き／repedit＝正式報告書の編集内容
+const IDB_STORES = {pending:"repId", zdraft:"id", repedit:"repId"};
+let _idbP = null;
 function phDb(){
-  return new Promise((res, rej)=>{
+  if(_idbP) return _idbP;
+  _idbP = new Promise((res, rej)=>{
     if(!("indexedDB" in window)) return rej(new Error("no idb"));
-    const r = indexedDB.open(PH_DB, 1);
-    r.onupgradeneeded = ()=>r.result.createObjectStore(PH_ST, {keyPath:"repId"});
-    r.onsuccess = ()=>res(r.result);
+    const r = indexedDB.open(PH_DB, 2);
+    r.onupgradeneeded = ()=>{
+      const db = r.result;
+      Object.keys(IDB_STORES).forEach(n=>{ if(!db.objectStoreNames.contains(n)) db.createObjectStore(n, {keyPath:IDB_STORES[n]}); });
+    };
+    r.onsuccess = ()=>{ const db = r.result; db.onversionchange = ()=>{ db.close(); _idbP = null; }; res(db); };
     r.onerror = ()=>rej(r.error);
-  });
+    r.onblocked = ()=>rej(new Error("idb blocked"));
+  }).catch(e=>{ _idbP = null; throw e; });
+  return _idbP;
 }
-function phTx(mode, fn){
+function idbTx(store, mode, fn){
   return phDb().then(db=>new Promise((res, rej)=>{
-    const tx = db.transaction(PH_ST, mode);
-    const out = fn(tx.objectStore(PH_ST));
+    const tx = db.transaction(store, mode);
+    const out = fn(tx.objectStore(store));
     tx.oncomplete = ()=>res(out && out.result!==undefined ? out.result : undefined);
     tx.onerror = ()=>rej(tx.error);
+    tx.onabort = ()=>rej(tx.error || new Error("abort"));
   }));
 }
+function phTx(mode, fn){ return idbTx(PH_ST, mode, fn); }
 function phPut(rec){ return phTx("readwrite", st=>st.put(rec)); }
 function phDel(id){ return phTx("readwrite", st=>st.delete(id)); }
 function phAll(){ return phTx("readonly", st=>st.getAll()); }
@@ -1659,24 +1741,73 @@ function setNFilter(v){
 }
 
 // ===== 正式報告書（社外提出用）の出力 =====
-function printOfficialReport(){
-  const repId = (document.getElementById("repSel")||{}).value;
+// 「編集・写真の追加」で直した文章と追加写真は、報告書ごとにこの端末（IndexedDB）へ保存し、PDF・Excelの両方に反映する。
+const repEditCache = {};
+const OFF_LVL  = {ok:"良好", warn:"要注意", ng:"要是正", na:"対象外"};
+const OFF_LVLC = {ok:"#2e7d32", warn:"#ef6c00", ng:"#c62828", na:"#78909c"};
+function offFindings(rep){ return ledger.filter(z=>z.repId===rep.id || (!z.repId && z.site===rep.site && z.date===rep.date)); }
+function reDefaults(rep, findings){
+  const allDone = findings.length > 0 && findings.every(z=>z.status==="完了");
+  return {
+    date: new Date().toISOString().slice(0,10),
+    client: (masters.clients && masters.clients[rep.site]) || "",
+    agent: "",
+    intro: "下記のとおり安全パトロールを実施"+(allDone ? "し、指摘事項の是正を完了" : "")+"いたしましたので、ご報告申し上げます。",
+    good: rep.good || ""
+  };
+}
+// 保存値が null の項目は「標準の文面（自動）」を使う
+async function getRepEdit(repId){
+  if(repEditCache[repId]) return repEditCache[repId];
+  let e = null;
+  try{ e = await idbTx("repedit", "readonly", st=>st.get(repId)); }catch(err){}
+  if(!e){ const t = lsGet("anpat_repedit_txt", {})[repId]; if(t) e = Object.assign({}, t, {photos:[]}); }
+  e = Object.assign({repId:repId, date:null, client:null, agent:null, intro:null, good:null, photos:[], blank:2, ts:0}, e||{});
+  repEditCache[repId] = e;
+  return e;
+}
+let reSaveTimer = null;
+function saveRepEdit(e, now){
+  repEditCache[e.repId] = e;
+  clearTimeout(reSaveTimer);
+  reSaveTimer = setTimeout(async ()=>{
+    e.ts = Date.now();
+    let ok = true;
+    try{ await idbTx("repedit", "readwrite", st=>st.put(e)); }
+    catch(err){ ok = false; }
+    try{ const m = lsGet("anpat_repedit_txt", {}); m[e.repId] = Object.assign({}, e, {photos:[]}); lsSet("anpat_repedit_txt", m); }catch(x){}
+    const s = document.getElementById("re_saved");
+    if(s) s.textContent = ok ? "💾 この端末に保存しました（"+hhmm(e.ts)+"）"
+      : "⚠ 写真をこの端末に保存できませんでした（文章は保存済み）。この画面を閉じる前に出力してください。";
+  }, now ? 0 : 400);
+}
+async function offModel(repId, fmt){
   const rep = lsGet("anpat_reports", []).find(r=>r.id===repId);
-  if(!rep){ alert("出力する報告書を選択してください（報告書の確定後に出力できます）。"); return; }
+  if(!rep) return null;
+  const findings = offFindings(rep);
+  const def = reDefaults(rep, findings);
+  const e = await getRepEdit(repId);
+  const pick = k => e[k]!=null ? e[k] : def[k];
+  return {
+    rep, findings, fmt,
+    allDone: findings.length > 0 && findings.every(z=>z.status==="完了"),
+    title: fmt==="official" ? "安全パトロール実施報告書" : "安全パトロール報告書",
+    date: pick("date"), client: pick("client"), agent: pick("agent"), intro: pick("intro"), good: pick("good"),
+    photos: (e.photos||[]).filter(p=>p && p.data),
+    blank: e.blank==null ? 2 : +e.blank
+  };
+}
+function offHTML(m){
+  const rep = m.rep, findings = m.findings;
   const esc = s=>String(s==null?"":s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/\n/g,"<br>");
-  const LVL = {ok:"良好", warn:"要注意", ng:"要是正", na:"対象外"};
-  const LVLC = {ok:"#2e7d32", warn:"#ef6c00", ng:"#c62828", na:"#78909c"};
-  // チェック項目一覧表
   let itemsHtml = "";
   if(rep.items && rep.items.length){
     itemsHtml = `<table><tr><th style="width:14%">区分</th><th>点検項目</th><th style="width:12%">評価</th></tr>`
-      + rep.items.map(x=>`<tr><td>${esc(x.c)}</td><td>${esc(x.t)}${x.cm?`<div class="sub">→ ${esc(x.cm)}</div>`:""}</td><td style="color:${LVLC[x.l]||"#333"};font-weight:bold;text-align:center;">${LVL[x.l]||""}</td></tr>`).join("")
+      + rep.items.map(x=>`<tr><td>${esc(x.c)}</td><td>${esc(x.t)}${x.cm?`<div class="sub">→ ${esc(x.cm)}</div>`:""}</td><td style="color:${OFF_LVLC[x.l]||"#333"};font-weight:bold;text-align:center;">${OFF_LVL[x.l]||""}</td></tr>`).join("")
       + `</table>`;
   } else {
     itemsHtml = `<p class="sub">（この報告書は旧バージョンで確定されたため、チェック項目一覧の記録がありません）</p>`;
   }
-  // 指摘・是正・完了の状況（報告書IDで紐付け。旧データは現場＋日付で照合）
-  const findings = ledger.filter(z=>z.repId===rep.id || (!z.repId && z.site===rep.site && z.date===rep.date));
   let fHtml = "";
   if(findings.length){
     fHtml = findings.map((z,i)=>{
@@ -1694,30 +1825,24 @@ function printOfficialReport(){
   } else {
     fHtml = `<p>要是正の指摘事項はありませんでした。</p>`;
   }
-  // 様式の分岐（社内様式／役所・発注者提出用）
-  const fmt = (document.getElementById("repFmt")||{}).value || "internal";
-  const allDone = findings.length > 0 && findings.every(z=>z.status==="完了");
-  const todayJ = new Date().toISOString().slice(0,10);
-  let title, headHtml, signHtml;
-  if(fmt === "official"){
-    title = "安全パトロール実施報告書";
-    // 宛先：マスタに登録された発注者名を自動印字（未登録は手書き用の下線）
-    const client = (masters.clients && masters.clients[rep.site]) || "";
+  let headHtml = "", signHtml;
+  if(m.fmt === "official"){
     headHtml = `
-<div style="text-align:right;">提出日：${todayJ}</div>
-<div style="font-size:15px; margin:14px 0 4px;">${client ? esc(client) : "＿＿＿＿＿＿＿＿＿＿＿＿＿＿"}　御中</div>
-<div class="co" style="margin-top:10px;">株式会社中西組<br>現場代理人：＿＿＿＿＿＿＿＿＿＿＿＿</div>
-<p style="margin:14px 0 4px;">　下記のとおり安全パトロールを実施${allDone ? "し、指摘事項の是正を完了" : ""}いたしましたので、ご報告申し上げます。</p>
+<div style="text-align:right;">提出日：${esc(m.date)}</div>
+<div style="font-size:15px; margin:14px 0 4px;">${m.client ? esc(m.client) : "＿＿＿＿＿＿＿＿＿＿＿＿＿＿"}　御中</div>
+<div class="co" style="margin-top:10px;">株式会社中西組<br>現場代理人：${m.agent ? esc(m.agent) : "＿＿＿＿＿＿＿＿＿＿＿＿"}</div>
+<p style="margin:14px 0 4px;">　${esc(m.intro)}</p>
 <div style="text-align:center; letter-spacing:6px; margin:4px 0;">記</div>`;
     signHtml = `<table class="sign"><tr><th style="text-align:center;">監督員<br>（発注者確認欄）</th><th style="text-align:center;">現場代理人</th><th style="text-align:center;">主任技術者</th><th style="text-align:center;">安全担当者</th></tr>
 <tr><td></td><td></td><td></td><td></td></tr></table>`;
   } else {
-    title = "安全パトロール報告書";
-    headHtml = "";
     signHtml = `<table class="sign"><tr><th style="text-align:center;">点検者</th><th style="text-align:center;">現場代理人</th><th style="text-align:center;">安全担当者</th><th style="text-align:center;">所属長</th></tr>
 <tr><td></td><td></td><td></td><td></td></tr></table>`;
   }
-  const html = `<!DOCTYPE html><html lang="ja"><head><meta charset="UTF-8"><title>${title} ${esc(rep.site)}</title>
+  const photoHtml = m.photos.length
+    ? `<h2>5．実施状況写真</h2><div class="pg">` + m.photos.map(p=>`<figure><img src="${p.data}"><figcaption>${esc(p.caption)}</figcaption></figure>`).join("") + `</div>`
+    : "";
+  return `<!DOCTYPE html><html lang="ja"><head><meta charset="UTF-8"><title>${m.title} ${esc(rep.site)}</title>
 <style>
 body{font-family:"Yu Mincho","Hiragino Mincho ProN",serif;max-width:760px;margin:0 auto;padding:24px;font-size:13px;line-height:1.8;color:#111;}
 h1{font-size:22px;text-align:center;letter-spacing:8px;margin:8px 0 4px;}
@@ -1729,33 +1854,389 @@ th{background:#eef2f8;font-weight:bold;text-align:left;}
 .sub{font-size:11px;color:#555;}
 .fx{border:1px solid #999;border-radius:4px;padding:10px;margin:8px 0;page-break-inside:avoid;font-family:"Yu Gothic",sans-serif;}
 img{max-width:46%;margin:4px;border:1px solid #ccc;}
+.pg{display:flex;flex-wrap:wrap;gap:10px;justify-content:space-between;}
+.pg figure{width:48.5%;margin:0;page-break-inside:avoid;font-family:"Yu Gothic",sans-serif;}
+.pg figure img{width:100%;max-width:100%;height:62mm;object-fit:contain;background:#f3f4f6;margin:0;display:block;}
+.pg figcaption{font-size:11px;border:1px solid #999;border-top:none;padding:3px 6px;min-height:1.6em;}
 .sign td{height:70px;width:25%;text-align:center;vertical-align:bottom;font-size:11px;}
 .foot{font-size:10px;color:#777;text-align:right;margin-top:16px;}
 @media print{ body{padding:0;} }
 </style></head><body>
-${fmt==="official" ? "" : '<div class="co">株式会社中西組</div>'}
-<h1>${title}</h1>
+${m.fmt==="official" ? "" : '<div class="co">株式会社中西組</div>'}
+<h1>${m.title}</h1>
 ${headHtml}
 <h2>1．実施概要</h2>
 <table>
 <tr><th style="width:22%">工事名</th><td colspan="3">${esc(rep.site)}</td></tr>
 <tr><th>パトロール種別</th><td>${esc(rep.ptype)}</td><th style="width:18%">実施日</th><td>${esc(rep.date)}</td></tr>
 <tr><th>点検者</th><td>${esc(rep.inspector)}</td><th>現場担当者</th><td>${esc(rep.tanto)}</td></tr>
-<tr><th>点検結果</th><td colspan="3">点検 ${rep.items? rep.items.length : rep.total} 項目中、要是正 ${rep.ng} 件${findings.length && findings.every(z=>z.status==="完了")? "（全件是正完了・承認済）" : ""}</td></tr>
+<tr><th>点検結果</th><td colspan="3">点検 ${rep.items? rep.items.length : rep.total} 項目中、要是正 ${rep.ng} 件${m.allDone? "（全件是正完了・承認済）" : ""}</td></tr>
 </table>
 <h2>2．チェック項目別 点検結果</h2>
 ${itemsHtml}
 <h2>3．指摘事項および是正・完了の状況</h2>
 ${fHtml}
 <h2>4．良好・評価事項</h2>
-<p>${esc(rep.good || "（記載なし）")}</p>
-<h2>5．確認欄</h2>
+<p>${esc(m.good || "（記載なし）")}</p>
+${photoHtml}
+<h2>${m.photos.length ? 6 : 5}．確認欄</h2>
 ${signHtml}
 <div class="foot">㈱中西組 安全パトロールアプリ出力（出力日：${new Date().toISOString().slice(0,10)}）</div>
-<script>setTimeout(function(){window.print();},600);<\/script></body></html>`;
+<script>setTimeout(function(){window.print();},800);<\/script></body></html>`;
+}
+function offSelected(){
+  const repId = (document.getElementById("repSel")||{}).value;
+  const fmt = (document.getElementById("repFmt")||{}).value || "internal";
+  const rep = lsGet("anpat_reports", []).find(r=>r.id===repId);
+  return {repId, fmt, rep};
+}
+async function printOfficialReport(){
+  const s = offSelected();
+  if(!s.rep){ alert("出力する報告書を選択してください（報告書の確定後に出力できます）。"); return; }
+  // ポップアップは押した直後に開く（後から開くとブロックされるため）
   const w = window.open("", "_blank");
   if(!w){ alert("ポップアップがブロックされました。ブラウザの設定でこのサイトのポップアップを許可してください。"); return; }
-  w.document.write(html); w.document.close();
+  w.document.write('<p style="font-family:sans-serif;padding:24px;">報告書を作成しています…</p>');
+  const m = await offModel(s.repId, s.fmt);
+  w.document.open(); w.document.write(offHTML(m)); w.document.close();
+}
+
+// ----- 編集・写真の追加 画面 -----
+let reCur = null; // {repId, rep, def}
+const RE_FIELDS = [["date","re_date"],["client","re_client"],["agent","re_agent"],["intro","re_intro"],["good","re_good"]];
+async function openRepEditor(){
+  const s = offSelected();
+  if(!s.rep){ alert("編集する報告書を選択してください（報告書の確定後に編集できます）。"); return; }
+  const def = reDefaults(s.rep, offFindings(s.rep));
+  const e = await getRepEdit(s.repId);
+  reCur = {repId:s.repId, rep:s.rep, def:def};
+  document.getElementById("re_meta").textContent = s.rep.date+"　"+s.rep.site+"（"+s.rep.ptype+"）";
+  document.getElementById("re_fmt").value = s.fmt;
+  RE_FIELDS.forEach(([k,id])=>{ document.getElementById(id).value = e[k]!=null ? e[k] : def[k]; });
+  document.getElementById("re_blank").value = String(e.blank==null ? 2 : e.blank);
+  reFmtChanged();
+  renderRePhotos();
+  document.getElementById("re_saved").textContent = e.ts
+    ? "💾 前回の編集を読み込みました（"+new Date(e.ts).toLocaleString()+" 保存）"
+    : "変更すると自動でこの端末に保存されます。";
+  document.getElementById("repedov").style.display = "block";
+  document.body.style.overflow = "hidden";
+}
+function closeRepEditor(){
+  if(reCur && repEditCache[reCur.repId]) saveRepEdit(repEditCache[reCur.repId], true);
+  document.getElementById("repedov").style.display = "none";
+  document.body.style.overflow = "";
+}
+function reFmtChanged(){
+  const f = document.getElementById("re_fmt").value;
+  document.getElementById("repFmt").value = f;
+  document.getElementById("re_official").style.display = f==="official" ? "block" : "none";
+}
+function reInput(){
+  if(!reCur) return;
+  const e = repEditCache[reCur.repId], d = reCur.def;
+  RE_FIELDS.forEach(([k,id])=>{ const v = document.getElementById(id).value; e[k] = (v===d[k]) ? null : v; });
+  e.blank = +document.getElementById("re_blank").value;
+  saveRepEdit(e);
+}
+function reResetText(){
+  if(!reCur || !confirm("文章（提出日・宛先・現場代理人・前文・良好事項）を標準の文面に戻しますか？\n追加した写真はそのまま残ります。")) return;
+  const e = repEditCache[reCur.repId];
+  RE_FIELDS.forEach(([k,id])=>{ e[k] = null; document.getElementById(id).value = reCur.def[k]; });
+  saveRepEdit(e, true);
+}
+function renderRePhotos(){
+  const e = repEditCache[reCur.repId];
+  const esc = s=>String(s==null?"":s).replace(/&/g,"&amp;").replace(/"/g,"&quot;").replace(/</g,"&lt;");
+  document.getElementById("re_pcount").textContent = e.photos.length;
+  document.getElementById("re_photos").innerHTML = e.photos.length ? e.photos.map((p,i)=>`
+    <div style="display:flex; gap:10px; align-items:flex-start; border-top:1px solid var(--line); padding:10px 0;">
+      <img src="${p.data}" style="width:104px; height:78px; object-fit:cover; border-radius:6px; border:1px solid var(--line); flex-shrink:0;">
+      <div style="flex:1; min-width:0;">
+        <input type="text" value="${esc(p.caption)}" placeholder="写真の説明（例：朝礼・KY活動状況）" oninput="reCaption(${i},this.value)">
+        <div style="display:flex; gap:6px; margin-top:6px;">
+          <button type="button" class="rebtn" onclick="reMove(${i},-1)" ${i===0?"disabled":""}>↑ 上へ</button>
+          <button type="button" class="rebtn" onclick="reMove(${i},1)" ${i===e.photos.length-1?"disabled":""}>↓ 下へ</button>
+          <button type="button" class="rebtn" style="color:var(--ng);" onclick="reDelPhoto(${i})">削除</button>
+        </div>
+      </div>
+    </div>`).join("") : '<div class="note">追加写真はまだありません。下のボタンから撮影・選択するか、点検時の写真を取り込んでください。</div>';
+}
+function reCaption(i, v){ const e = repEditCache[reCur.repId]; if(e.photos[i]){ e.photos[i].caption = v; saveRepEdit(e); } }
+function reMove(i, dir){
+  const e = repEditCache[reCur.repId], j = i+dir;
+  if(j<0 || j>=e.photos.length) return;
+  const t = e.photos[i]; e.photos[i] = e.photos[j]; e.photos[j] = t;
+  renderRePhotos(); saveRepEdit(e, true);
+}
+function reDelPhoto(i){
+  if(!confirm("この写真を報告書から外しますか？")) return;
+  const e = repEditCache[reCur.repId];
+  e.photos.splice(i, 1);
+  renderRePhotos(); saveRepEdit(e, true);
+}
+async function reAddPhoto(input){
+  const files = Array.from(input.files || []);
+  input.value = "";
+  const e = repEditCache[reCur.repId];
+  for(const f of files){
+    const data = await resizeImageFile(f);
+    if(!data) continue;
+    e.photos.push({data:data, caption:""});
+    renderRePhotos();
+  }
+  saveRepEdit(e, true);
+}
+// 点検時に撮った写真（要注意・項目外など）をサーバーから取り込む。要是正の写真は「3．指摘事項」に載るので除く
+async function reImport(){
+  const e = repEditCache[reCur.repId];
+  let ps = photoCache[reCur.repId];
+  if(!ps){
+    try{
+      const r = await fetch(getSyncUrl(), {method:"POST", body:JSON.stringify({photoGet:1, repId:reCur.repId}), redirect:"follow"});
+      const d = await r.json();
+      ps = (d && d.photoGet===reCur.repId && Array.isArray(d.photos)) ? d.photos : [];
+      if(ps.length) photoCache[reCur.repId] = ps;
+    }catch(err){ alert("写真を取得できませんでした。電波の届く場所で、もう一度お試しください。"); return; }
+  }
+  if(!ps.length){ alert("この報告書には、取り込める点検時の写真がありません。\n（写真付き通知の改良より前に確定した報告書や、写真なしの報告書は取り込めません）"); return; }
+  const key = s=>String(s).length+":"+String(s).slice(-80);
+  const skip = {};
+  offFindings(reCur.rep).forEach(z=>(z.photos||[]).forEach(p=>skip[key(p)] = 1));
+  e.photos.forEach(p=>skip[key(p.data)] = 1);
+  let n = 0;
+  ps.forEach(p=>{ if(p && p.data && !skip[key(p.data)]){ e.photos.push({data:p.data, caption:p.caption||""}); skip[key(p.data)] = 1; n++; } });
+  renderRePhotos(); saveRepEdit(e, true);
+  alert(n ? n+" 枚を取り込みました。説明は必要に応じて書き直してください。\n（要是正の写真は「3．指摘事項」に自動で載るため取り込んでいません）"
+          : "取り込める新しい写真はありませんでした。\n（すでに追加済みか、要是正の写真だけです。要是正の写真は「3．指摘事項」に自動で載ります）");
+}
+
+// ----- Excel（.xlsx）出力 -----
+let xlLoading = null;
+function loadExcelJS(){
+  if(window.ExcelJS) return Promise.resolve();
+  if(xlLoading) return xlLoading;
+  const urls = [
+    "https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js",
+    "https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.3.0/exceljs.min.js"
+  ];
+  const one = u => new Promise((res, rej)=>{
+    const s = document.createElement("script");
+    s.src = u; s.async = true;
+    s.onload = ()=> window.ExcelJS ? res() : rej(new Error("ExcelJS missing"));
+    s.onerror = ()=>{ s.remove(); rej(new Error("load failed: "+u)); };
+    document.head.appendChild(s);
+  });
+  xlLoading = urls.reduce((p,u)=>p.catch(()=>one(u)), Promise.reject()).catch(e=>{ xlLoading = null; throw e; });
+  return xlLoading;
+}
+function imgDim(src){
+  return new Promise(res=>{ const im = new Image(); im.onload = ()=>res([im.naturalWidth||4, im.naturalHeight||3]); im.onerror = ()=>res([4,3]); im.src = src; });
+}
+async function buildOfficialXlsx(m){
+  const rep = m.rep;
+  const wb = new ExcelJS.Workbook();
+  wb.creator = "㈱中西組 安全パトロールアプリ";
+  const ws = wb.addWorksheet("報告書", {
+    pageSetup:{paperSize:9, orientation:"portrait", scale:100, horizontalCentered:true,
+      margins:{left:0.4, right:0.4, top:0.5, bottom:0.55, header:0.2, footer:0.25}},
+    headerFooter:{oddFooter:"&C&P / &N"},
+    views:[{showGridLines:false}]
+  });
+  const NC = 8, CW = 11.5, COLPX = Math.floor(CW*7+5);
+  ws.columns = Array.from({length:NC}, ()=>({width:CW}));
+  const FONT = "游ゴシック", MIN = "游明朝";
+  const thin = {style:"thin", color:{argb:"FF333333"}};
+  const B4 = {top:thin, left:thin, bottom:thin, right:thin};
+  const HEAD = {type:"pattern", pattern:"solid", fgColor:{argb:"FFEEF2F8"}};
+  const GRAY = {argb:"FF666666"};
+  const BUDGET = 735; // 1ページに載せる高さ（pt）
+  let r = 1, used = 0;
+  const vlen = s => [...String(s||"")].reduce((a,ch)=>a+(ch.charCodeAt(0)>0xff?2:1), 0);
+  const lines = (s, cols) => { const per = Math.max(8, Math.floor(cols*CW*0.92)); return String(s||"").split("\n").reduce((a,ln)=>a+Math.max(1, Math.ceil(vlen(ln)/per)), 0); };
+  const textH = (s, cols, size) => Math.max(18, lines(s, cols)*Math.round((size||10)*1.6) + 6);
+  const brk = h => { if(used>0 && used+h > BUDGET){ ws.getRow(r-1).addPageBreak(); used = 0; } };
+  const row = h => { ws.getRow(r).height = h; used += h; r++; };
+  function box(c1, c2, value, st){
+    st = st || {};
+    if(c2>c1) ws.mergeCells(r, c1, r, c2);
+    const cell = ws.getCell(r, c1);
+    cell.value = value==null ? "" : value;
+    cell.font = Object.assign({name:FONT, size:10}, st.font);
+    cell.alignment = Object.assign({vertical:"top", horizontal:"left", wrapText:true}, st.align);
+    if(st.fill) cell.fill = st.fill;
+    if(st.border) for(let c=c1; c<=c2; c++) ws.getCell(r, c).border = st.border;
+  }
+  const para = (text, st, h) => { const hh = h || textH(text, NC, st && st.font && st.font.size); brk(hh); box(1, NC, text, st); row(hh); };
+  const gap = h => { h = h||8; if(used+h <= BUDGET) row(h); };
+  function heading(t){
+    brk(22+44);
+    box(1, NC, t, {font:{bold:true, size:11, color:{argb:"FF1F3864"}}, fill:HEAD, align:{vertical:"middle"}});
+    ws.getCell(r, 1).border = {left:{style:"thick", color:{argb:"FF1F3864"}}};
+    row(22);
+  }
+  const PH = 180, PHPX = Math.round(PH*96/72);
+  // 写真を左右2枚ずつ。blank は Excel で写真を貼るための空き枠
+  async function photoPair(ps, withCap){
+    brk(PH + (withCap ? 20 : 0));
+    for(let i=0; i<2; i++){
+      const p = ps[i]; if(!p) continue;
+      const c1 = i*4+1, c2 = c1+3;
+      ws.mergeCells(r, c1, r, c2);
+      for(let c=c1; c<=c2; c++) ws.getCell(r, c).border = B4;
+      if(p.data){
+        const [w0, h0] = await imgDim(p.data);
+        const bw = COLPX*4-14, bh = PHPX-14;
+        const sc = Math.min(bw/w0, bh/h0);
+        const w = Math.round(w0*sc), h = Math.round(h0*sc);
+        const id = wb.addImage({base64:p.data, extension:/^data:image\/png/.test(p.data) ? "png" : "jpeg"});
+        // 枠の中央に置く（位置はExcel本来の単位 EMU＝1px あたり9525 で直接指定）
+        const offX = (COLPX*4-w)/2, offY = (PHPX-h)/2;
+        ws.addImage(id, {tl:{nativeCol:(c1-1)+Math.floor(offX/COLPX), nativeColOff:Math.round((offX%COLPX)*9525),
+                             nativeRow:r-1, nativeRowOff:Math.round(offY*9525)},
+                         ext:{width:w, height:h}, editAs:"oneCell"});
+      } else {
+        const cell = ws.getCell(r, c1);
+        cell.value = "（写真貼付欄）";
+        cell.font = {name:FONT, size:10, color:{argb:"FFA0A8B4"}};
+        cell.alignment = {horizontal:"center", vertical:"middle"};
+      }
+    }
+    row(PH);
+    if(withCap){
+      for(let i=0; i<2; i++){ const p = ps[i]; if(!p) continue; const c1 = i*4+1; box(c1, c1+3, p.data ? (p.caption||"") : "説明：", {font:{size:9}, border:B4, align:{vertical:"middle"}}); }
+      row(20);
+    }
+  }
+  const spaced = s => [...s].join(" ");
+  // ---- 見出し
+  if(m.fmt !== "official") para("株式会社中西組", {align:{horizontal:"right"}}, 18);
+  para(spaced(m.title), {font:{name:MIN, size:16, bold:true}, align:{horizontal:"center", vertical:"middle"}}, 34);
+  if(m.fmt === "official"){
+    para("提出日："+(m.date||""), {align:{horizontal:"right"}}, 18);
+    para((m.client || "＿＿＿＿＿＿＿＿＿＿＿＿＿＿")+"　御中", {font:{size:12}, align:{vertical:"middle"}}, 26);
+    para("株式会社中西組", {align:{horizontal:"right"}}, 18);
+    para("現場代理人："+(m.agent || "＿＿＿＿＿＿＿＿＿＿＿＿"), {align:{horizontal:"right"}}, 18);
+    gap(6);
+    para("　"+(m.intro||""));
+    para("記", {align:{horizontal:"center"}}, 20);
+  }
+  // ---- 1．実施概要
+  heading("1．実施概要");
+  const kv = (l1, v1, l2, v2) => {
+    const h = Math.max(20, textH(v1, l2 ? 2 : 6), l2 ? textH(v2, 2) : 0);
+    brk(h);
+    const L = {fill:HEAD, font:{bold:true}, border:B4, align:{vertical:"middle"}}, V = {border:B4, align:{vertical:"middle"}};
+    box(1, 2, l1, L);
+    if(l2){ box(3, 4, v1, V); box(5, 6, l2, L); box(7, 8, v2, V); }
+    else box(3, 8, v1, V);
+    row(h);
+  };
+  kv("工事名", rep.site);
+  kv("パトロール種別", rep.ptype, "実施日", rep.date);
+  kv("点検者", rep.inspector, "現場担当者", rep.tanto);
+  kv("点検結果", "点検 "+(rep.items ? rep.items.length : rep.total)+" 項目中、要是正 "+rep.ng+" 件"+(m.allDone ? "（全件是正完了・承認済）" : ""));
+  // ---- 2．チェック項目
+  heading("2．チェック項目別 点検結果");
+  if(rep.items && rep.items.length){
+    const H = {fill:HEAD, font:{bold:true}, border:B4, align:{vertical:"middle"}};
+    const hdr = ()=>{ box(1, 2, "区分", H); box(3, 7, "点検項目", H); box(8, 8, "評価", Object.assign({}, H, {align:{horizontal:"center", vertical:"middle"}})); row(20); };
+    brk(20+24); hdr();
+    rep.items.forEach(x=>{
+      const t = (x.t||"") + (x.cm ? "\n→ "+x.cm : "");
+      const h = Math.max(textH(t, 5), textH(x.c, 2, 9));
+      if(used>0 && used+h > BUDGET){ brk(h); hdr(); } // ページをまたぐときは見出し行を付け直す
+      box(1, 2, x.c, {border:B4, font:{size:9}});
+      box(3, 7, t, {border:B4});
+      box(8, 8, OFF_LVL[x.l]||"", {border:B4, font:{bold:true, color:{argb:"FF"+(OFF_LVLC[x.l]||"#333333").slice(1).toUpperCase()}}, align:{horizontal:"center"}});
+      row(h);
+    });
+  } else {
+    para("（この報告書は旧バージョンで確定されたため、チェック項目一覧の記録がありません）", {font:{size:9, color:GRAY}});
+  }
+  // ---- 3．指摘事項
+  heading("3．指摘事項および是正・完了の状況");
+  if(!m.findings.length) para("要是正の指摘事項はありませんでした。");
+  for(let i=0; i<m.findings.length; i++){
+    const z = m.findings[i];
+    para("指摘 "+(i+1)+"："+z.item, {font:{bold:true}, fill:{type:"pattern", pattern:"solid", fgColor:{argb:"FFF6F8FB"}}, border:{top:thin}});
+    if(z.comment) para("指摘内容："+z.comment);
+    para("是正期限："+z.deadline+"　状態："+z.status, {font:{size:9, color:GRAY}}, 18);
+    const zp = z.photos||[];
+    for(let k=0; k<zp.length; k+=2) await photoPair(zp.slice(k, k+2).map(d=>({data:d})), false);
+    if(z.fix){
+      para("是正報告（"+z.fix.date+"）"+(z.fix.comment ? "："+z.fix.comment : ""), {font:{bold:true}});
+      const fp = z.fix.photos||[];
+      for(let k=0; k<fp.length; k+=2) await photoPair(fp.slice(k, k+2).map(d=>({data:d})), false);
+    }
+    if(z.approved) para("是正完了確認："+z.approved.date+"（承認済）", {font:{bold:true}});
+    gap(8);
+  }
+  // ---- 4．良好・評価事項
+  heading("4．良好・評価事項");
+  para(m.good || "（記載なし）");
+  // ---- 5．実施状況写真（追加写真＋貼り付け用の空き枠）
+  let sec = 5;
+  const list = m.photos.map(p=>({data:p.data, caption:p.caption||""})).concat(Array.from({length:Math.max(0, m.blank)}, ()=>({})));
+  if(list.length){
+    heading(sec+"．実施状況写真"); sec++;
+    for(let k=0; k<list.length; k+=2) await photoPair(list.slice(k, k+2), true);
+  }
+  // ---- 確認欄
+  heading(sec+"．確認欄");
+  const signs = m.fmt==="official" ? ["監督員（発注者確認欄）","現場代理人","主任技術者","安全担当者"] : ["点検者","現場代理人","安全担当者","所属長"];
+  brk(28+64);
+  signs.forEach((s,i)=>box(i*2+1, i*2+2, s, {fill:HEAD, font:{bold:true, size:9}, border:B4, align:{horizontal:"center", vertical:"middle"}}));
+  row(28);
+  signs.forEach((s,i)=>box(i*2+1, i*2+2, "", {border:B4}));
+  row(64);
+  gap(6);
+  para("㈱中西組 安全パトロールアプリ出力（出力日："+new Date().toISOString().slice(0,10)+"）", {font:{size:8, color:GRAY}, align:{horizontal:"right"}}, 14);
+  ws.pageSetup.printArea = "A1:H"+(r-1);
+  const buf = await wb.xlsx.writeBuffer();
+  return new Blob([buf], {type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"});
+}
+let xlFile = null;
+async function exportOfficialExcel(){
+  const s = offSelected();
+  if(!s.rep){ alert("出力する報告書を選択してください（報告書の確定後に出力できます）。"); return; }
+  xlShow("⏳ Excelを作成しています…", false);
+  try{ await loadExcelJS(); }
+  catch(e){ xlHide(); alert("Excel作成の部品を読み込めませんでした。\nインターネットにつながる場所で、もう一度お試しください（1度読み込めば次からは早くなります）。"); return; }
+  try{
+    const m = await offModel(s.repId, s.fmt);
+    const blob = await buildOfficialXlsx(m);
+    const name = (m.title+"_"+m.rep.site+"_"+m.rep.date).replace(/[\\\/:*?"<>|\s　]+/g, "_").slice(0, 80)+".xlsx";
+    xlFile = new File([blob], name, {type:blob.type});
+    xlShow("✅ Excelの準備ができました", true);
+  }catch(e){
+    console.error(e);
+    xlHide();
+    alert("Excelの作成に失敗しました。\n"+(e && e.message ? e.message : e));
+  }
+}
+function xlShow(msg, ready){
+  document.getElementById("xl_msg").textContent = msg;
+  document.getElementById("xl_name").textContent = ready && xlFile ? xlFile.name : "";
+  document.getElementById("xl_btns").style.display = ready ? "block" : "none";
+  const canShare = ready && xlFile && navigator.canShare && navigator.canShare({files:[xlFile]});
+  document.getElementById("xl_share").style.display = canShare ? "" : "none";
+  document.getElementById("xlov").style.display = "block";
+}
+function xlHide(){ document.getElementById("xlov").style.display = "none"; }
+function xlDownload(){
+  if(!xlFile) return;
+  const url = URL.createObjectURL(xlFile);
+  const a = document.createElement("a");
+  a.href = url; a.download = xlFile.name;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url), 60000);
+  xlHide();
+}
+async function xlShare(){
+  if(!xlFile) return;
+  try{ await navigator.share({files:[xlFile], title:xlFile.name}); xlHide(); }
+  catch(e){ if(e && e.name!=="AbortError") alert("共有できませんでした。「保存」をお使いください。"); }
 }
 
 // ===== 集計・傾向分析 =====
@@ -2000,40 +2481,107 @@ function updateBadge(){
   b.textContent = n; b.style.display = n? "":"none";
 }
 
-let zPhotoTemp = {};
+// ===== 是正の下書き（記入途中の文章・写真を端末に自動保存） =====
+// 是正報告ボタンを押すまで、記入した文章と撮った写真をこの端末（IndexedDB）に保存しておく。
+// アプリを閉じても、1分ごとの同期で画面が描き直されても消えない。
+const zDraft = {};          // 指摘ID → {id, c:文章, p:[写真], ts:保存時刻}
+let zNeedRender = false;    // 入力中に同期が来たら描き直しを後回しにする
+const zSaveTimers = {};
+function zd(id){ return zDraft[id] || (zDraft[id] = {id:id, c:"", p:[], ts:0}); }
+function hhmm(t){ const d = t ? new Date(t) : new Date(); return ("0"+d.getHours()).slice(-2)+":"+("0"+d.getMinutes()).slice(-2); }
+function zLsSet(id, c){ try{ const m = lsGet("anpat_zdraft_txt", {}); if(c) m[id] = c; else delete m[id]; lsSet("anpat_zdraft_txt", m); }catch(e){} }
+function zStat(id, t){ const el = document.getElementById("zs_"+id); if(el) el.textContent = t; }
+function saveZDraft(id, now){
+  clearTimeout(zSaveTimers[id]);
+  zSaveTimers[id] = setTimeout(async ()=>{
+    const d = zd(id);
+    if(!d.c && !d.p.length){
+      d.ts = 0;
+      try{ await idbTx("zdraft", "readwrite", st=>st.delete(id)); }catch(e){}
+      zLsSet(id, null); zStat(id, "");
+      return;
+    }
+    d.ts = Date.now();
+    let ok = true;
+    try{ await idbTx("zdraft", "readwrite", st=>st.put({id:d.id, c:d.c, p:d.p, ts:d.ts})); }
+    catch(e){ ok = false; }
+    zLsSet(id, d.c); // 文章は予備としてもう1か所に保存
+    zStat(id, (ok || !d.p.length)
+      ? "💾 この端末に保存しました（"+hhmm(d.ts)+"）"
+      : "⚠ 写真を端末に保存できませんでした（文章は保存済み）。報告するまでアプリを閉じないでください。");
+  }, now ? 0 : 500);
+}
+function delZDraft(id){
+  clearTimeout(zSaveTimers[id]);
+  delete zDraft[id];
+  zLsSet(id, null);
+  idbTx("zdraft", "readwrite", st=>st.delete(id)).catch(()=>{});
+}
+async function loadZDrafts(){
+  try{
+    const all = await idbTx("zdraft", "readonly", st=>st.getAll()) || [];
+    all.forEach(r=>{ if(r && r.id){ const d = zd(r.id); if(!d.c && !d.p.length){ d.c = r.c||""; d.p = r.p||[]; d.ts = r.ts||0; } } });
+  }catch(e){}
+  try{
+    const m = lsGet("anpat_zdraft_txt", {});
+    Object.keys(m).forEach(id=>{ const d = zd(id); if(!d.c) d.c = m[id]; });
+  }catch(e){}
+  if(document.getElementById("page-zesei").style.display==="block" && !zEditing()) renderZesei();
+}
+function zEditing(){ const a = document.activeElement; return !!(a && a.id && a.id.indexOf("zc_")===0); }
+function onZInput(id, el){ zd(id).c = el.value; zStat(id, "✍ 入力中…"); saveZDraft(id); }
+// サーバーの台帳で「未是正」でなくなった指摘（報告済み・削除済み）の下書きを片付ける
+function zCleanupDrafts(){
+  const open = {};
+  ledger.forEach(z=>{ if(z.status==="未是正") open[z.id] = 1; });
+  Object.keys(zDraft).forEach(id=>{ if(!open[id]) delZDraft(id); });
+}
+// 画像ファイルを長辺1280pxのJPEGに縮小（是正写真・報告書の追加写真で共用）
+function resizeImageFile(f){
+  return new Promise(res=>{
+    const r = new FileReader();
+    r.onload = e=>{
+      const im = new Image();
+      im.onload = ()=>{
+        const MAX = 1280, sc = Math.min(1, MAX/Math.max(im.width, im.height));
+        const cv = document.createElement("canvas");
+        cv.width = Math.round(im.width*sc); cv.height = Math.round(im.height*sc);
+        cv.getContext("2d").drawImage(im, 0, 0, cv.width, cv.height);
+        res(cv.toDataURL("image/jpeg", 0.8));
+      };
+      im.onerror = ()=>res(null);
+      im.src = e.target.result;
+    };
+    r.onerror = ()=>res(null);
+    r.readAsDataURL(f);
+  });
+}
 function renderZPhotos(id){
   const box = document.getElementById("zp_"+id);
   if(!box) return;
-  const ps = zPhotoTemp[id] || [];
+  const ps = zd(id).p;
   box.innerHTML = ps.map((p,i)=>
     `<span class="pwrap"><img src="${p}" class="thumb"><button class="pdel" onclick="delZPhoto('${id}',${i})">✕</button></span>`
   ).join("");
 }
 function delZPhoto(id, i){
-  if(!zPhotoTemp[id]) return;
-  zPhotoTemp[id].splice(i, 1);
+  const d = zd(id);
+  if(!d.p[i]) return;
+  if(!confirm("この写真を削除しますか？")) return;
+  d.p.splice(i, 1);
   renderZPhotos(id);
+  saveZDraft(id, true);
 }
-function addZPhoto(id, input){
+async function addZPhoto(id, input){
   const files = Array.from(input.files || []);
   input.value = "";
-  files.forEach(f=>{
-    const r = new FileReader();
-    r.onload = e=>{
-      const im = new Image();
-      im.onload = ()=>{
-        const MAX=1280, sc=Math.min(1,MAX/Math.max(im.width,im.height));
-        const cv=document.createElement("canvas");
-        cv.width=Math.round(im.width*sc); cv.height=Math.round(im.height*sc);
-        cv.getContext("2d").drawImage(im,0,0,cv.width,cv.height);
-        const data=cv.toDataURL("image/jpeg",0.8);
-        (zPhotoTemp[id]=zPhotoTemp[id]||[]).push(data);
-        renderZPhotos(id);
-      };
-      im.src=e.target.result;
-    };
-    r.readAsDataURL(f);
-  });
+  for(const f of files){
+    const data = await resizeImageFile(f);
+    if(!data) continue;
+    zd(id).p.push(data);
+    renderZPhotos(id);
+    saveZDraft(id, true); // 撮ったらすぐ保存
+  }
 }
 
 function photoRow(ps){ return (ps&&ps.length)? "<div>"+ps.map(p=>`<img src="${p}" class="thumb">`).join("")+"</div>" : ""; }
@@ -2061,7 +2609,11 @@ function renderZesei(){
   active.forEach(z=>{ const k=zkey(z); if(!groups[k]){ groups[k]=[]; order.push(k); } groups[k].push(z); });
   order.reverse(); // 新しい報告書を上に
   zGroupKeys = order;
-  wrap.innerHTML = order.map((k, gi)=>{
+  const escZ = s=>String(s==null?"":s).replace(/&/g,"&amp;").replace(/</g,"&lt;");
+  const guide = (role==="fix" && active.some(z=>z.status==="未是正"))
+    ? '<div class="note" style="margin:0 0 6px; background:#f4f8ff; border:1px solid #d6e4f7; border-radius:8px; padding:8px 10px; color:#37506e;">✍ 記入した是正内容と撮った写真は、この端末に自動で保存されます。報告ボタンを押すまで、アプリを閉じても続きから書けます（保存はこの端末だけです）。</div>'
+    : "";
+  wrap.innerHTML = guide + order.map((k, gi)=>{
     const items = groups[k];
     const z0 = items[0];
     const nOpen = items.filter(z=>z.status==="未是正").length;
@@ -2089,9 +2641,10 @@ function renderZesei(){
       }
       if(z.status==="未是正" && role==="fix"){
         ih += `<div style="margin-top:6px;">
-          <textarea id="zc_${z.id}" placeholder="この指摘の是正内容を記入"></textarea>
+          <textarea id="zc_${z.id}" placeholder="この指摘の是正内容を記入" oninput="onZInput('${z.id}',this)">${escZ(zd(z.id).c)}</textarea>
           <label class="photo-btn">📷 撮影<input type="file" accept="image/*" capture="environment" style="display:none" onchange="addZPhoto('${z.id}',this)"></label>　<label class="photo-btn">🖼️ フォルダから選択<input type="file" accept="image/*" multiple style="display:none" onchange="addZPhoto('${z.id}',this)"></label>
-          <div id="zp_${z.id}"></div></div>`;
+          <div id="zp_${z.id}"></div>
+          <div class="note" id="zs_${z.id}" style="margin-top:4px;">${zd(z.id).ts ? "💾 この端末に保存済み（"+hhmm(zd(z.id).ts)+"）" : ""}</div></div>`;
       }
       return ih+"</div>";
     }).join("");
@@ -2105,6 +2658,7 @@ function renderZesei(){
     }
     return h+"</div>";
   }).join("");
+  if(role==="fix") active.forEach(z=>{ if(z.status==="未是正") renderZPhotos(z.id); });
 }
 
 // 報告書単位の是正報告：記入済みの各指摘をまとめて報告し、点検者へ通知は1通
@@ -2112,13 +2666,15 @@ function submitFixRep(gi){
   const key = zGroupKeys[gi]; if(key===undefined) return;
   const items = ledger.filter(z=>z.status==="未是正" && zkey(z)===key);
   if(!items.length) return;
-  const noPhoto = items.filter(z=>!(zPhotoTemp[z.id]||[]).length).length;
+  const noPhoto = items.filter(z=>!zd(z.id).p.length).length;
   if(noPhoto && !confirm("是正後の写真がない指摘が "+noPhoto+" 件あります。このまままとめて報告しますか？（原則、各指摘に写真1枚）")) return;
   const d = new Date().toISOString().slice(0,10);
   items.forEach(z=>{
-    z.fix = {date:d, comment:(document.getElementById("zc_"+z.id)||{}).value||"", photos:zPhotoTemp[z.id]||[]};
+    const el = document.getElementById("zc_"+z.id);
+    if(el) zd(z.id).c = el.value;
+    z.fix = {date:d, comment:zd(z.id).c||"", photos:zd(z.id).p.slice()};
     z.status = "是正報告済";
-    delete zPhotoTemp[z.id];
+    delZDraft(z.id);
     queuePending(z);
   });
   renderZesei();
@@ -2233,6 +2789,7 @@ function syncNow(showResult){
       pendingLedger = pendingLedger.filter(z=> sentSnap[z.id] !== JSON.stringify(z));
       lsSet("anpat_pending", pendingLedger);
       pendingLedger.forEach(p=>{ const i2 = ledger.findIndex(x=>x.id===p.id); if(i2>=0) ledger[i2]=p; else ledger.push(p); });
+      if(d && Array.isArray(d.ledger)) zCleanupDrafts();
       if(!pendingLedger.length) offlineWarned = false;
       updateOfflineBanner();
       if(d && d.reports){
@@ -2258,7 +2815,9 @@ function syncNow(showResult){
       updateNotifBadge();
       notifyDevice(); // 新着の自分宛て通知を端末の通知欄にも表示
       flushPhotoUploads(); // 未送信の報告書写真があれば送る
-      if(document.getElementById("page-zesei").style.display==="block") renderZesei();
+      if(document.getElementById("page-zesei").style.display==="block"){
+        if(zEditing()) zNeedRender = true; else { zNeedRender = false; renderZesei(); }
+      }
       if(document.getElementById("page-notif").style.display==="block") renderNotif();
       if(document.getElementById("page-bunseki").style.display==="block") renderBunseki();
       setSyncStatus("同期：完了（"+new Date().toLocaleTimeString()+"）　台帳 "+ledger.length+" 件"
@@ -2547,6 +3106,7 @@ render();
 updateBadge();
 updateNotifBadge();
 updateOfflineBanner(); // 前回の未送信分があればバナー表示
+loadZDrafts(); // 是正の下書き（記入途中の文章・写真）を戻す
 syncNow(false); // 起動時に自動同期（是正台帳はサーバーから取得）
 window.addEventListener("online", ()=>syncNow(false)); // 電波復帰で自動再送
 setInterval(()=>syncNow(false), 60000); // 1分ごとに自動同期
