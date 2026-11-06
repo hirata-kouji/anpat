@@ -138,6 +138,10 @@
   .thumb{border-radius:8px;}
   details summary::-webkit-details-marker{color:var(--blue);}
   .dsum{font-weight:bold; color:var(--navy); font-size:14px; cursor:pointer; padding:4px 0;}
+  .undoBar{display:inline-flex; gap:6px; align-items:center;}
+  .ubtn{display:inline-flex; align-items:center; justify-content:center; width:38px; height:26px; padding:0; border:none; border-radius:13px; background:rgba(255,255,255,.2); color:#fff; cursor:pointer;}
+  .ubtn:disabled{opacity:.32; cursor:default;}
+  .undoBar.light .ubtn{background:#eef2f8; color:var(--navy); border:1.5px solid var(--line); width:42px; height:30px; border-radius:15px;}
 </style>
 </head>
 <body>
@@ -148,7 +152,8 @@
   </h1>
   <div class="sub" style="display:flex; justify-content:space-between; align-items:center;">
     <span id="syncbar" onclick="syncNow(true)" style="cursor:pointer; font-size:11px; opacity:.92;">同期：確認中…</span>
-    <button onclick="openHelp()" style="background:rgba(255,255,255,.2); color:#fff; border:none; border-radius:12px; padding:3px 12px; font-size:12px; font-weight:bold; white-space:nowrap;">❓ 使い方</button>
+    <span style="display:inline-flex; gap:8px; align-items:center;"><span class="undoBar "><button type="button" class="ubtn" data-u="-1" onclick="undoDo(-1)" disabled><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14L4 9l5-5"/><path d="M4 9h11a5 5 0 0 1 0 10h-3"/></svg></button><button type="button" class="ubtn" data-u="1" onclick="undoDo(1)" disabled><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 14l5-5-5-5"/><path d="M20 9H9a5 5 0 0 0 0 10h3"/></svg></button></span>
+    <button onclick="openHelp()" style="background:rgba(255,255,255,.2); color:#fff; border:none; border-radius:12px; padding:3px 12px; font-size:12px; font-weight:bold; white-space:nowrap;">❓ 使い方</button></span>
   </div>
   <nav class="tabs">
     <button class="tab active" id="tab-input" onclick="showPage('input')">
@@ -529,7 +534,9 @@
 </style>
 <div id="repedov" style="display:none; position:fixed; inset:0; background:rgba(15,25,50,.6); z-index:61; overflow:auto; -webkit-overflow-scrolling:touch;">
   <div style="background:#fff; border-radius:14px; margin:20px 10px 40px; padding:16px; box-shadow:0 8px 24px rgba(0,0,0,.3);">
-    <div style="font-size:17px; font-weight:bold; color:var(--navy);">✏️ 報告書の編集・写真の追加</div>
+    <div style="display:flex; justify-content:space-between; align-items:center; gap:8px;">
+      <div style="font-size:17px; font-weight:bold; color:var(--navy);">✏️ 報告書の編集・写真の追加</div><span class="undoBar light"><button type="button" class="ubtn" data-u="-1" onclick="undoDo(-1)" disabled><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14L4 9l5-5"/><path d="M4 9h11a5 5 0 0 1 0 10h-3"/></svg></button><button type="button" class="ubtn" data-u="1" onclick="undoDo(1)" disabled><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 14l5-5-5-5"/><path d="M20 9H9a5 5 0 0 0 0 10h3"/></svg></button></span>
+    </div>
     <div class="zmeta" id="re_meta" style="margin-top:4px;"></div>
     <label>様式</label>
     <select id="re_fmt" onchange="reFmtChanged()">
@@ -934,7 +941,7 @@ function aiToComment(key){
   const s = state[key];
   if(!s || !s.aiResult){ alert("先に「AI写真診断」を実行してください。"); return; }
   const ta = document.getElementById("c_"+key);
-  ta.value = (ta.value ? ta.value + "\n" : "") + "（AI所見）" + s.aiResult;
+  inspDo("AI所見を入れる", "ai_"+key, ()=>{ ta.value = (ta.value ? ta.value + "\n" : "") + "（AI所見）" + s.aiResult; });
 }
 
 function render(){
@@ -959,6 +966,9 @@ function render(){
 }
 
 function setLevel(key, lv){
+  return inspDo("評価を選ぶ", "lv_"+key, ()=>setLevel0(key, lv));
+}
+function setLevel0(key, lv){
   state[key] = state[key] || {};
   state[key].level = lv;
   madeRegistered = false;
@@ -988,7 +998,7 @@ function bulkOk(){
     .filter(k=>!(state[k] && state[k].level));
   if(!rest.length){ alert("未入力の項目はありません。"); return; }
   if(!confirm("未入力の "+rest.length+" 項目をすべて「良好」にしますか？\n※実際に確認した項目だけにしてください。要注意・要是正があれば先に入力を。")) return;
-  rest.forEach(k=>setLevel(k, "ok"));
+  inspDo("残りを良好にする", "bulk", ()=>rest.forEach(k=>setLevel(k, "ok")));
   window.scrollTo({top:document.body.scrollHeight, behavior:"smooth"});
 }
 
@@ -1013,8 +1023,7 @@ function renderPhotos(key){
 }
 function delPhoto(key, i){
   if(!state[key] || !state[key].photoData) return;
-  state[key].photoData.splice(i, 1);
-  renderPhotos(key);
+  inspDo("写真を削除", "pd_"+key, ()=>{ state[key].photoData.splice(i, 1); renderPhotos(key); });
 }
 function addPhoto(key, input){
   // 撮影・フォルダ選択（複数可）の両方に対応。画像は縮小して保持
@@ -1031,10 +1040,12 @@ function addPhoto(key, input){
         cv.width = Math.round(im.width*sc); cv.height = Math.round(im.height*sc);
         cv.getContext("2d").drawImage(im,0,0,cv.width,cv.height);
         const data = cv.toDataURL("image/jpeg",0.8);
-        state[key] = state[key] || {};
-        state[key].photoData = state[key].photoData || [];
-        state[key].photoData.push(data);
-        renderPhotos(key);
+        inspDo("写真を追加", "pa_"+key, ()=>{
+          state[key] = state[key] || {};
+          state[key].photoData = state[key].photoData || [];
+          state[key].photoData.push(data);
+          renderPhotos(key);
+        });
       };
       im.src = e.target.result;
     };
@@ -1097,8 +1108,7 @@ function renderFreePhotos(){
   ).join("");
 }
 function delFreePhoto(i){
-  freePhotos.splice(i, 1);
-  renderFreePhotos();
+  inspDo("写真を削除", "fpd", ()=>{ freePhotos.splice(i, 1); renderFreePhotos(); });
 }
 function addFreePhoto(input){
   const files = Array.from(input.files || []);
@@ -1112,8 +1122,8 @@ function addFreePhoto(input){
         const cv=document.createElement("canvas");
         cv.width=Math.round(im.width*sc); cv.height=Math.round(im.height*sc);
         cv.getContext("2d").drawImage(im,0,0,cv.width,cv.height);
-        freePhotos.push(cv.toDataURL("image/jpeg",0.8));
-        renderFreePhotos();
+        const data = cv.toDataURL("image/jpeg",0.8);
+        inspDo("写真を追加", "fpa", ()=>{ freePhotos.push(data); renderFreePhotos(); });
       };
       im.src=e.target.result;
     };
@@ -1934,6 +1944,8 @@ function reFmtChanged(){
 }
 function reInput(){
   if(!reCur) return;
+  const a = document.activeElement, fid = (a && RE_LABEL[a.id]) ? a.id : "";
+  undoPush(RE_LABEL[fid] || "報告書の文章を直す", "re", reCur.repId, fid, reSnap(reCur.repId));
   const e = repEditCache[reCur.repId], d = reCur.def;
   RE_FIELDS.forEach(([k,id])=>{ const v = document.getElementById(id).value; e[k] = (v===d[k]) ? null : v; });
   e.blank = +document.getElementById("re_blank").value;
@@ -1942,6 +1954,7 @@ function reInput(){
 function reResetText(){
   if(!reCur || !confirm("文章（提出日・宛先・現場代理人・前文・良好事項）を標準の文面に戻しますか？\n追加した写真はそのまま残ります。")) return;
   const e = repEditCache[reCur.repId];
+  undoPush("文章を標準に戻す", "re", reCur.repId, "reset", reSnap(reCur.repId));
   RE_FIELDS.forEach(([k,id])=>{ e[k] = null; document.getElementById(id).value = reCur.def[k]; });
   saveRepEdit(e, true);
 }
@@ -1962,15 +1975,17 @@ function renderRePhotos(){
       </div>
     </div>`).join("") : '<div class="note">追加写真はまだありません。下のボタンから撮影・選択するか、点検時の写真を取り込んでください。</div>';
 }
-function reCaption(i, v){ const e = repEditCache[reCur.repId]; if(e.photos[i]){ e.photos[i].caption = v; saveRepEdit(e); } }
+function reCaption(i, v){ const e = repEditCache[reCur.repId]; if(e.photos[i]){ undoPush("写真の説明を入力", "re", reCur.repId, "cap"+i, reSnap(reCur.repId)); e.photos[i].caption = v; saveRepEdit(e); } }
 function reMove(i, dir){
   const e = repEditCache[reCur.repId], j = i+dir;
   if(j<0 || j>=e.photos.length) return;
+  undoPush("写真を並べ替える", "re", reCur.repId, "mv", reSnap(reCur.repId));
   const t = e.photos[i]; e.photos[i] = e.photos[j]; e.photos[j] = t;
   renderRePhotos(); saveRepEdit(e, true);
 }
 function reDelPhoto(i){
   if(!confirm("この写真を報告書から外しますか？")) return;
+  undoPush("写真を外す", "re", reCur.repId, "del", reSnap(reCur.repId));
   const e = repEditCache[reCur.repId];
   e.photos.splice(i, 1);
   renderRePhotos(); saveRepEdit(e, true);
@@ -1979,9 +1994,11 @@ async function reAddPhoto(input){
   const files = Array.from(input.files || []);
   input.value = "";
   const e = repEditCache[reCur.repId];
+  let first = true;
   for(const f of files){
     const data = await resizeImageFile(f);
     if(!data) continue;
+    if(first){ undoPush("写真を追加", "re", reCur.repId, "add", reSnap(reCur.repId)); first = false; }
     e.photos.push({data:data, caption:""});
     renderRePhotos();
   }
@@ -2005,7 +2022,9 @@ async function reImport(){
   offFindings(reCur.rep).forEach(z=>(z.photos||[]).forEach(p=>skip[key(p)] = 1));
   e.photos.forEach(p=>skip[key(p.data)] = 1);
   let n = 0;
+  const before = reSnap(reCur.repId);
   ps.forEach(p=>{ if(p && p.data && !skip[key(p.data)]){ e.photos.push({data:p.data, caption:p.caption||""}); skip[key(p.data)] = 1; n++; } });
+  if(n) undoPush("点検時の写真を取り込む", "re", reCur.repId, "imp", before);
   renderRePhotos(); saveRepEdit(e, true);
   alert(n ? n+" 枚を取り込みました。説明は必要に応じて書き直してください。\n（要是正の写真は「3．指摘事項」に自動で載るため取り込んでいません）"
           : "取り込める新しい写真はありませんでした。\n（すでに追加済みか、要是正の写真だけです。要是正の写真は「3．指摘事項」に自動で載ります）");
@@ -2529,7 +2548,7 @@ async function loadZDrafts(){
   if(document.getElementById("page-zesei").style.display==="block" && !zEditing()) renderZesei();
 }
 function zEditing(){ const a = document.activeElement; return !!(a && a.id && a.id.indexOf("zc_")===0); }
-function onZInput(id, el){ zd(id).c = el.value; zStat(id, "✍ 入力中…"); saveZDraft(id); }
+function onZInput(id, el){ undoPush("是正内容を入力", "z", id, "c", zSnap(id)); zd(id).c = el.value; zStat(id, "✍ 入力中…"); saveZDraft(id); }
 // サーバーの台帳で「未是正」でなくなった指摘（報告済み・削除済み）の下書きを片付ける
 function zCleanupDrafts(){
   const open = {};
@@ -2568,6 +2587,7 @@ function delZPhoto(id, i){
   const d = zd(id);
   if(!d.p[i]) return;
   if(!confirm("この写真を削除しますか？")) return;
+  undoPush("是正の写真を削除", "z", id, "pd", zSnap(id));
   d.p.splice(i, 1);
   renderZPhotos(id);
   saveZDraft(id, true);
@@ -2578,6 +2598,7 @@ async function addZPhoto(id, input){
   for(const f of files){
     const data = await resizeImageFile(f);
     if(!data) continue;
+    undoPush("是正の写真を追加", "z", id, "pa", zSnap(id));
     zd(id).p.push(data);
     renderZPhotos(id);
     saveZDraft(id, true); // 撮ったらすぐ保存
@@ -2675,6 +2696,7 @@ function submitFixRep(gi){
     z.fix = {date:d, comment:zd(z.id).c||"", photos:zd(z.id).p.slice()};
     z.status = "是正報告済";
     delZDraft(z.id);
+    undoDrop("z", z.id);
     queuePending(z);
   });
   renderZesei();
@@ -2808,7 +2830,7 @@ function syncNow(showResult){
         masters = d.masters;
         if(d.routes) routes = Object.assign({}, DEFAULT_ROUTES, d.routes);
         lsSet("anpat_masters", masters); lsSet("anpat_routes", routes); lsSet("anpat_mver", d.mver);
-        refreshSelects(); render();
+        refreshSelects(); render(); undoDrop("insp"); inspPrev = inspRead();
         if(document.getElementById("page-admin").style.display==="block") renderAdmin();
       }
       updateBadge();
@@ -3000,7 +3022,7 @@ function saveMasters(){
   if(!masters.common.length) masters.common = ["（共通項目未設定）"];
   lsSet("anpat_masters", masters);
   lsSet("anpat_routes", routes); // 報告先設定もまとめて保存（ワンボタン化）
-  refreshSelects(); render(); renderRoutes();
+  refreshSelects(); render(); undoDrop("insp"); inspPrev = inspRead(); renderRoutes();
   applyAdminLock();
   if(lsGet("anpat_adminkey","")){
     lsSet("anpat_mver", Date.now());
@@ -3025,7 +3047,7 @@ function resetMasters(){
   if(!confirm("工事名・種別・チェック項目をすべて初期値に戻しますか？")) return;
   masters = JSON.parse(JSON.stringify(DEFAULT_MASTERS));
   lsSet("anpat_masters", masters);
-  renderConfig(); refreshSelects(); render();
+  renderConfig(); refreshSelects(); render(); undoDrop("insp"); inspPrev = inspRead();
   alert("初期値に戻しました");
 }
 
@@ -3099,10 +3121,193 @@ function showPage(p){
   window.scrollTo(0,0);
 }
 
+// ===== 一つ前に戻る（↩）／一つ先に進む（↪） =====
+// 書き換える直前の姿を控えて、1手ずつ戻す・進める。40手まで。同じ欄に1.8秒以内に続けた入力は1手にまとめる。
+// 控えはこの端末の画面を開いている間だけ（アプリを開き直すと消える）。確定・是正報告・承認などサーバーへ送ったものは戻さない。
+const UNDO_MAX = 40, UNDO_MERGE_MS = 1800;
+let undoStack = [], redoStack = [], undoApplying = false;
+
+function undoPush(label, dom, id, sub, snap){
+  if(undoApplying) return;
+  const k = dom+":"+(id||"")+":"+(sub||""), now = Date.now();
+  const top = undoStack[undoStack.length-1];
+  redoStack = [];
+  if(top && top.k===k && top.label===label && now-top.t < UNDO_MERGE_MS){ top.t = now; undoSync(); return; }
+  undoStack.push({k:k, dom:dom, id:id||"", label:label, t:now, snap:snap});
+  if(undoStack.length > UNDO_MAX) undoStack.shift();
+  undoSync();
+}
+// 戻せなくなったもの（報告済みの是正・項目が変わった点検入力など）を控えから外す
+function undoDrop(dom, id){
+  const keep = e => !(e.dom===dom && (id===undefined || e.id===id));
+  undoStack = undoStack.filter(keep); redoStack = redoStack.filter(keep);
+  undoSync();
+}
+function undoDo(dir){
+  const from = dir<0 ? undoStack : redoStack, to = dir<0 ? redoStack : undoStack;
+  const e = from.pop();
+  if(!e){ undoSync(); return; }
+  const D = UNDO_DOMS[e.dom];
+  to.push({k:e.k, dom:e.dom, id:e.id, label:e.label, t:0, snap:D.get(e.id)});
+  undoApplying = true;
+  try{ if(D.show) D.show(e.id); D.set(e.id, e.snap); }
+  catch(err){ console.error(err); }
+  finally{ undoApplying = false; }
+  if(e.dom==="insp") inspPrev = inspRead();
+  undoSync();
+  undoToast((dir<0 ? "↩ 取り消しました：" : "↪ やり直しました：") + e.label);
+}
+function undoSync(){
+  const u = undoStack[undoStack.length-1], r = redoStack[redoStack.length-1];
+  document.querySelectorAll(".ubtn").forEach(b=>{
+    const back = b.getAttribute("data-u")==="-1", e = back ? u : r;
+    b.disabled = !e;
+    b.title = back ? (e ? "一つ前に戻る　「"+e.label+"」を取り消します（Ctrl+Z）" : "戻せる作業はありません")
+                   : (e ? "一つ先に進む　「"+e.label+"」をやり直します（Ctrl+Shift+Z）" : "進める作業はありません");
+    b.setAttribute("aria-label", b.title);
+  });
+}
+function undoToast(msg){
+  let t = document.getElementById("utoast");
+  if(!t){
+    t = document.createElement("div");
+    t.id = "utoast";
+    t.style.cssText = "position:fixed;left:50%;bottom:92px;transform:translateX(-50%);background:rgba(20,30,50,.93);color:#fff;padding:9px 16px;border-radius:20px;font-size:13px;z-index:95;max-width:88%;text-align:center;pointer-events:none;transition:opacity .25s;opacity:0;";
+    document.body.appendChild(t);
+  }
+  t.textContent = msg;
+  t.style.opacity = "1";
+  clearTimeout(t._h);
+  t._h = setTimeout(()=>{ t.style.opacity = "0"; }, 2400);
+}
+document.addEventListener("keydown", e=>{
+  if(!(e.ctrlKey || e.metaKey) || e.altKey) return;
+  const k = (e.key||"").toLowerCase();
+  if(k==="z"){ e.preventDefault(); undoDo(e.shiftKey ? 1 : -1); }
+  else if(k==="y"){ e.preventDefault(); undoDo(1); }
+}, true);
+
+// ---- 点検入力（基本情報・評価・指摘内容・写真・良好事項・項目外の指摘）
+const INSP_FIELDS = ["site","siteOther","ptype","wtype","inspector","tanto","tantoMail","pdate","good","freeLevel","freeText"];
+const INSP_LABEL = {site:"工事名を変える", siteOther:"工事名を入力", ptype:"パトロール種別を変える", wtype:"工種を変える",
+  inspector:"点検者名を入力", tanto:"現場担当者名を入力", tantoMail:"メールアドレスを入力", pdate:"点検日を変える",
+  good:"良好・評価事項を入力", freeLevel:"項目外の区分を変える", freeText:"項目外の指摘を入力"};
+let inspPrev = null, inspDepth = 0;
+function inspRead(){
+  const f = {};
+  INSP_FIELDS.forEach(id=>{ const el = document.getElementById(id); if(el) f[id] = el.value; });
+  const c = {};
+  document.querySelectorAll('#page-input textarea[id^="c_"]').forEach(el=>{ if(el.value) c[el.id.slice(2)] = el.value; });
+  const st = {};
+  Object.keys(state).forEach(k=>{ const s = state[k]; if(s) st[k] = Object.assign({}, s, {photoData:(s.photoData||[]).slice()}); });
+  return {f:f, c:c, st:st, fp:freePhotos.slice()};
+}
+function inspSig(s){
+  return JSON.stringify([s.f, s.c, Object.keys(s.st).sort().map(k=>[k, s.st[k].level||"", (s.st[k].photoData||[]).length, (s.st[k].photoData||[]).map(p=>p.length).join(",")]),
+    s.fp.length, s.fp.map(p=>p.length).join(",")]);
+}
+function inspCommit(label, sub){
+  if(undoApplying) return;
+  const cur = inspRead();
+  if(inspPrev && inspSig(cur)!==inspSig(inspPrev)) undoPush(label, "insp", "", sub, inspPrev);
+  inspPrev = cur;
+}
+// 関数でまとめて変える操作（評価を選ぶ・残り良好・写真）を1手として控える
+function inspDo(label, sub, fn){
+  if(inspDepth || undoApplying) return fn();
+  inspDepth++;
+  let r;
+  try{ r = fn(); } finally{ inspDepth--; }
+  inspCommit(label, sub);
+  return r;
+}
+function inspRestore(_, s){
+  const set = (id, v)=>{ const el = document.getElementById(id); if(el && v!==undefined) el.value = v; };
+  set("site", s.f.site); set("wtype", s.f.wtype);
+  render(); // 工種どおりに項目を作り直す（ここで一度空になる）
+  INSP_FIELDS.forEach(id=>set(id, s.f[id]));
+  const so = document.getElementById("siteOther");
+  if(so) so.style.display = (s.f.site==="その他") ? "block" : "none";
+  state = {};
+  Object.keys(s.st).forEach(k=>{ const v = s.st[k]; state[k] = Object.assign({}, v, {photoData:(v.photoData||[]).slice()}); });
+  Object.keys(state).forEach(k=>{
+    const lv = state[k].level;
+    LEVELS.forEach(l=>{ const b = document.getElementById(`b_${k}_${l[0]}`); if(b) b.className = (l[0]===lv) ? "sel-"+lv : ""; });
+    const d = document.getElementById("d_"+k);
+    if(d) d.className = (lv==="warn" || lv==="ng") ? "detail show" : "detail";
+    renderPhotos(k);
+  });
+  document.querySelectorAll('#page-input textarea[id^="c_"]').forEach(el=>{ el.value = s.c[el.id.slice(2)] || ""; });
+  freePhotos = s.fp.slice();
+  renderFreePhotos();
+  updateProgress();
+}
+function inspShow(){
+  if(document.getElementById("page-report").style.display==="block") backToInput();
+  else if(document.getElementById("page-input").style.display!=="block") showPage("input");
+}
+// 欄に打つ・選ぶ：画面側の処理（工種で項目を作り直す・工事名で担当者を入れる）が済んだあとに控える
+(function(){
+  const pg = document.getElementById("page-input");
+  const on = e=>{
+    const el = e.target;
+    if(!el || !el.id) return;
+    if(INSP_LABEL[el.id]) inspCommit(INSP_LABEL[el.id], el.id);
+    else if(el.id.indexOf("c_")===0) inspCommit("指摘内容を入力", el.id);
+  };
+  pg.addEventListener("input", on);
+  pg.addEventListener("change", on);
+})();
+
+// ---- 是正の下書き（文章・写真）
+function zSnap(id){ const d = zd(id); return {c:d.c, p:d.p.slice()}; }
+function zRestore(id, s){
+  const d = zd(id);
+  d.c = s.c; d.p = s.p.slice();
+  saveZDraft(id, true);
+  const ta = document.getElementById("zc_"+id);
+  if(ta) ta.value = d.c;
+  renderZPhotos(id);
+}
+function zShow(id){
+  const role = (document.getElementById("role")||{}).value;
+  if(document.getElementById("page-zesei").style.display!=="block") showPage("zesei");
+  if(role!=="fix") setRole("fix");
+}
+
+// ---- 報告書の編集（文章・追加写真）
+function reSnap(id){
+  const e = repEditCache[id] || {};
+  return {date:e.date, client:e.client, agent:e.agent, intro:e.intro, good:e.good, blank:e.blank,
+          photos:(e.photos||[]).map(p=>({data:p.data, caption:p.caption}))};
+}
+function reRestore(id, s){
+  const e = repEditCache[id];
+  if(!e) return;
+  ["date","client","agent","intro","good","blank"].forEach(k=>{ e[k] = s[k]; });
+  e.photos = s.photos.map(p=>({data:p.data, caption:p.caption}));
+  saveRepEdit(e, true);
+  if(reCur && reCur.repId===id && document.getElementById("repedov").style.display==="block"){
+    RE_FIELDS.forEach(([k, fid])=>{ document.getElementById(fid).value = e[k]!=null ? e[k] : reCur.def[k]; });
+    document.getElementById("re_blank").value = String(e.blank==null ? 2 : e.blank);
+    renderRePhotos();
+  }
+}
+const RE_LABEL = {re_date:"提出日を変える", re_client:"宛先を入力", re_agent:"現場代理人を入力", re_intro:"前文を入力",
+  re_good:"良好・評価事項を入力", re_blank:"空き写真枠を変える"};
+
+const UNDO_DOMS = {
+  insp: {get:()=>inspRead(), set:inspRestore, show:inspShow},
+  z:    {get:zSnap, set:zRestore, show:zShow},
+  re:   {get:reSnap, set:reRestore}
+};
+
 document.getElementById("pdate").value = new Date().toISOString().slice(0,10);
 refreshSelects();
 fillTanto();
 render();
+inspPrev = inspRead(); // 点検入力の控えの基準（起動直後の姿）
+undoSync();
 updateBadge();
 updateNotifBadge();
 updateOfflineBanner(); // 前回の未送信分があればバナー表示
